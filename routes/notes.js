@@ -122,4 +122,21 @@ router.post('/players', auth, isCoach, async (req, res) => {
   }
 });
 
+// Delete a player (coach only) - ADD THIS ROUTE
+router.delete('/players/:playerId', auth, isCoach, async (req, res) => {
+  try {
+    const { playerId } = req.params;
+
+    const player = await User.findById(playerId);
+    if (!player || player.role !== 'player') {
+      return res.status(404).json({ message: 'Player not found' });
+    }
+
+    await User.findByIdAndDelete(playerId);
+    res.json({ message: 'Player deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 module.exports = router;
