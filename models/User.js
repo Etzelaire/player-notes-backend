@@ -39,6 +39,10 @@ const userSchema = new mongoose.Schema({
     enum: ['coach', 'player'],
     default: 'player'
   },
+  fcmToken: {
+    type: String,
+    default: null
+  },
   notes: [noteSchema],
   createdAt: {
     type: Date,

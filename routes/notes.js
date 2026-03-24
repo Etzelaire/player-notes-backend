@@ -5,6 +5,9 @@ const { auth, isCoach } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Add this at the top with other imports
+const { sendNotificationToPlayer } = require('../utils/notifications');
+
 // Get my notes (for players)
 router.get('/my-notes', auth, async (req, res) => {
   try {
@@ -45,6 +48,26 @@ router.post('/players/:playerId/notes', auth, isCoach, async (req, res) => {
     });
 
     await player.save();
+
+    // Send push notification to player
+    if (player.fcmToken) {
+      try {
+        const coach = await User.findById(req.user.id);
+        await sendNotificationToPlayer(
+          player.fcmToken,
+          'New Note from Coach',
+          `${coach.name}: ${text.substring(0, 100)}${text.length > 100 ? '...' : ''}`,
+          {
+            type: 'new_note',
+            noteId: player.notes[player.notes.length - 1]._id.toString()
+          }
+        );
+      } catch (notifError) {
+        console.error('Error sending notification:', notifError);
+        // Don't fail the request if notification fails
+      }
+    }
+
     res.json(player);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -138,5 +161,20 @@ router.delete('/players/:playerId', auth, isCoach, async (req, res) => {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
+
+
+// Add this route before module.exports
+router.post('/save-token', auth, async (req, res) => {
+  try {
+    const { fcmToken } = req.body;
+    
+    await User.findByIdAndUpdate(req.user.id, { fcmToken });
+    
+    res.json({ message: 'Token saved successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 
 module.exports = router;
