@@ -2,11 +2,9 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const { auth, isCoach } = require('../middleware/auth');
+const { sendNotificationToPlayer } = require('../utils/notifications');
 
 const router = express.Router();
-
-// Add this at the top with other imports
-const { sendNotificationToPlayer } = require('../utils/notifications');
 
 // Get my notes (for players)
 router.get('/my-notes', auth, async (req, res) => {
@@ -49,10 +47,17 @@ router.post('/players/:playerId/notes', auth, isCoach, async (req, res) => {
 
     await player.save();
 
+    console.log('=== SENDING NOTIFICATION ===');
+    console.log('Player:', player.name);
+    console.log('Player FCM Token:', player.fcmToken);
+
     // Send push notification to player
     if (player.fcmToken) {
       try {
         const coach = await User.findById(req.user.id);
+        console.log('Coach:', coach.name);
+        console.log('Note text:', text.substring(0, 50));
+        
         await sendNotificationToPlayer(
           player.fcmToken,
           'New Note from Coach',
@@ -62,10 +67,12 @@ router.post('/players/:playerId/notes', auth, isCoach, async (req, res) => {
             noteId: player.notes[player.notes.length - 1]._id.toString()
           }
         );
+        console.log('✅ Notification sent successfully to:', player.name);
       } catch (notifError) {
-        console.error('Error sending notification:', notifError);
-        // Don't fail the request if notification fails
+        console.error('❌ Error sending notification:', notifError);
       }
+    } else {
+      console.log('⚠️ Player has no FCM token:', player.name);
     }
 
     res.json(player);
@@ -145,7 +152,7 @@ router.post('/players', auth, isCoach, async (req, res) => {
   }
 });
 
-// Delete a player (coach only) - ADD THIS ROUTE
+// Delete a player (coach only)
 router.delete('/players/:playerId', auth, isCoach, async (req, res) => {
   try {
     const { playerId } = req.params;
@@ -162,19 +169,29 @@ router.delete('/players/:playerId', auth, isCoach, async (req, res) => {
   }
 });
 
-
-// Add this route before module.exports
+// Save FCM token
 router.post('/save-token', auth, async (req, res) => {
   try {
     const { fcmToken } = req.body;
     
-    await User.findByIdAndUpdate(req.user.id, { fcmToken });
+    console.log('=== SAVING FCM TOKEN ===');
+    console.log('User ID:', req.user.id);
+    console.log('Token:', fcmToken);
+    
+    const user = await User.findByIdAndUpdate(
+      req.user.id, 
+      { fcmToken },
+      { new: true }
+    );
+    
+    console.log('Token saved for user:', user.name);
+    console.log('User FCM Token:', user.fcmToken);
     
     res.json({ message: 'Token saved successfully' });
   } catch (error) {
+    console.error('Error saving token:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
-
 
 module.exports = router;
