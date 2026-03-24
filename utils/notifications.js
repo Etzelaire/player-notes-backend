@@ -26,7 +26,28 @@ const sendNotificationToPlayer = async (fcmToken, title, body, data = {}) => {
       body
     },
     data: data,
-    token: fcmToken
+    token: fcmToken,
+    android: {
+      priority: 'high',
+      notification: {
+        channelId: 'player_notes_channel',
+        priority: 'high',
+        defaultSound: true,
+        defaultVibrateTimings: true,
+        visibility: 'public'
+      }
+    },
+    apns: {
+      payload: {
+        aps: {
+          sound: 'default',
+          contentAvailable: true
+        }
+      },
+      headers: {
+        'apns-priority': '10'
+      }
+    }
   };
 
   try {
