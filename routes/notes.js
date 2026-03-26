@@ -16,19 +16,22 @@ router.get('/my-notes', auth, async (req, res) => {
   }
 });
 
-// Get all players (for coaches)
+// Get coach's students (for coaches)
 router.get('/players', auth, isCoach, async (req, res) => {
   try {
-    const players = await User.find({ role: 'player' })
-      .select('name email notes createdAt')
-      .sort({ name: 1 });
-    res.json(players);
+    const coach = await User.findById(req.user.id).populate({
+      path: 'students',
+      select: 'name email notes createdAt'
+    });
+    
+    const students = coach.students || [];
+    res.json(students);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
-// Add note to a player (coach only)
+// Add note to a student (coach only)
 router.post('/players/:playerId/notes', auth, isCoach, async (req, res) => {
   try {
     const { text } = req.body;
@@ -126,44 +129,45 @@ router.put('/players/:playerId/notes/:noteId', auth, isCoach, async (req, res) =
   }
 });
 
-// Create a new player (coach only)
-router.post('/players', auth, isCoach, async (req, res) => {
+// Add a student to coach's list (coach only)
+router.post('/students', auth, isCoach, async (req, res) => {
   try {
-    const { name, email, password } = req.body;
-
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: 'Email already exists' });
+    const { email } = req.body;
+    
+    // Find the player by email
+    const player = await User.findOne({ email, role: 'player' });
+    
+    if (!player) {
+      return res.status(404).json({ message: 'No player found with this email. Ask them to register first.' });
     }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const player = new User({
-      name,
-      email,
-      password: hashedPassword,
-      role: 'player'
+    
+    // Check if already added
+    const coach = await User.findById(req.user.id);
+    if (coach.students && coach.students.includes(player._id)) {
+      return res.status(400).json({ message: 'This player is already your student' });
+    }
+    
+    // Add student to coach's list
+    await User.findByIdAndUpdate(req.user.id, {
+      $addToSet: { students: player._id }
     });
-
-    await player.save();
-    res.status(201).json(player);
+    
+    res.json({ message: 'Student added successfully', student: player });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
-// Delete a player (coach only)
-router.delete('/players/:playerId', auth, isCoach, async (req, res) => {
+// Remove a student from coach's list (coach only)
+router.delete('/students/:studentId', auth, isCoach, async (req, res) => {
   try {
-    const { playerId } = req.params;
-
-    const player = await User.findById(playerId);
-    if (!player || player.role !== 'player') {
-      return res.status(404).json({ message: 'Player not found' });
-    }
-
-    await User.findByIdAndDelete(playerId);
-    res.json({ message: 'Player deleted successfully' });
+    const { studentId } = req.params;
+    
+    await User.findByIdAndUpdate(req.user.id, {
+      $pull: { students: studentId }
+    });
+    
+    res.json({ message: 'Student removed successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
