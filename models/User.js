@@ -5,17 +5,16 @@ const noteSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
   createdAt: {
     type: Date,
     default: Date.now
   },
   updatedAt: {
-    type: Date,
-    default: Date.now
-  },
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+    type: Date
   }
 });
 
@@ -43,6 +42,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  students: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
   notes: [noteSchema],
   createdAt: {
     type: Date,

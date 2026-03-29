@@ -31,6 +31,31 @@ router.get('/players', auth, isCoach, async (req, res) => {
   }
 });
 
+// Search for players by email (for autocomplete)
+router.get('/search-players', auth, isCoach, async (req, res) => {
+  try {
+    const { query } = req.query;
+    
+    if (!query || query.length < 2) {
+      return res.json([]);
+    }
+    
+    const players = await User.find({
+      role: 'player',
+      $or: [
+        { email: { $regex: query, $options: 'i' } },
+        { name: { $regex: query, $options: 'i' } }
+      ]
+    })
+    .select('name email')
+    .limit(10);
+    
+    res.json(players);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 // Add note to a student (coach only)
 router.post('/players/:playerId/notes', auth, isCoach, async (req, res) => {
   try {
@@ -54,7 +79,6 @@ router.post('/players/:playerId/notes', auth, isCoach, async (req, res) => {
     console.log('Player:', player.name);
     console.log('Player FCM Token:', player.fcmToken);
 
-    // Send push notification to player
     if (player.fcmToken) {
       try {
         const coach = await User.findById(req.user.id);
@@ -134,20 +158,17 @@ router.post('/students', auth, isCoach, async (req, res) => {
   try {
     const { email } = req.body;
     
-    // Find the player by email
     const player = await User.findOne({ email, role: 'player' });
     
     if (!player) {
       return res.status(404).json({ message: 'No player found with this email. Ask them to register first.' });
     }
     
-    // Check if already added
     const coach = await User.findById(req.user.id);
     if (coach.students && coach.students.includes(player._id)) {
       return res.status(400).json({ message: 'This player is already your student' });
     }
     
-    // Add student to coach's list
     await User.findByIdAndUpdate(req.user.id, {
       $addToSet: { students: player._id }
     });
