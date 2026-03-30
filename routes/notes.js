@@ -62,49 +62,82 @@ router.post('/players/:playerId/notes', auth, isCoach, async (req, res) => {
     const { text, lessonId, lessonTitle } = req.body;
     const { playerId } = req.params;
 
-    console.log('=== ADDING NOTE ===');
+    console.log('===========================================');
+    console.log('=== ADDING/UPDATING NOTE ===');
     console.log('Player ID:', playerId);
-    console.log('Text:', text);
+    console.log('Text length:', text?.length);
     console.log('Lesson ID:', lessonId);
     console.log('Lesson Title:', lessonTitle);
+    console.log('===========================================');
 
     const player = await User.findById(playerId);
     if (!player || player.role !== 'player') {
+      console.log('ERROR: Player not found or not a player role');
       return res.status(404).json({ message: 'Player not found' });
     }
 
+    console.log('Player found:', player.name);
+    console.log('Current notes count:', player.notes.length);
+    
     // If this is a lesson note, check if one already exists
     if (lessonId) {
+      console.log('This is a LESSON note, checking for existing...');
+      
+      // Log all existing notes with lessonId
+      player.notes.forEach((note, index) => {
+        console.log(`Note ${index}: lessonId=${note.lessonId}, lessonTitle=${note.lessonTitle}`);
+      });
+      
       const existingLessonNoteIndex = player.notes.findIndex(
         note => note.lessonId === lessonId
       );
       
+      console.log('Existing note index:', existingLessonNoteIndex);
+      
       if (existingLessonNoteIndex !== -1) {
         // Update existing lesson note
-        console.log('Updating existing lesson note at index:', existingLessonNoteIndex);
+        console.log('UPDATING EXISTING lesson note at index:', existingLessonNoteIndex);
+        console.log('Old text:', player.notes[existingLessonNoteIndex].text);
+        console.log('New text:', text);
+        
         player.notes[existingLessonNoteIndex].text = text;
         player.notes[existingLessonNoteIndex].updatedAt = new Date();
+        
         await player.save();
         
-        console.log('Updated lesson note successfully');
+        console.log('Note updated successfully');
+        console.log('Updated note:', player.notes[existingLessonNoteIndex]);
+        console.log('===========================================');
+        
         return res.json(player);
+      } else {
+        console.log('NO existing note found, creating NEW lesson note');
       }
+    } else {
+      console.log('This is a REGULAR note (no lessonId)');
     }
 
     // Add new note
-    console.log('Creating new note');
-    player.notes.push({
+    console.log('CREATING NEW note');
+    const newNote = {
       text,
       lessonId: lessonId || null,
       lessonTitle: lessonTitle || null,
       createdBy: req.user.id,
       createdAt: new Date()
-    });
+    };
+    
+    console.log('New note object:', newNote);
+    
+    player.notes.push(newNote);
 
     await player.save();
+    
     console.log('New note added successfully');
+    console.log('Total notes now:', player.notes.length);
+    console.log('===========================================');
 
-    // Send notification logic here...
+    // Send notification
     if (player.fcmToken) {
       try {
         const coach = await User.findById(req.user.id);
@@ -117,7 +150,7 @@ router.post('/players/:playerId/notes', auth, isCoach, async (req, res) => {
             noteId: player.notes[player.notes.length - 1]._id.toString()
           }
         );
-        console.log('✅ Notification sent successfully to:', player.name);
+        console.log('✅ Notification sent to:', player.name);
       } catch (notifError) {
         console.error('❌ Error sending notification:', notifError);
       }
@@ -125,7 +158,7 @@ router.post('/players/:playerId/notes', auth, isCoach, async (req, res) => {
 
     res.json(player);
   } catch (error) {
-    console.error('Error in add note route:', error);
+    console.error('ERROR in add note route:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
