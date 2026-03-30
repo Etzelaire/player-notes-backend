@@ -1,5 +1,37 @@
 const mongoose = require('mongoose');
 
+const lessonNoteSchema = new mongoose.Schema({
+  lessonId: {
+    type: String,
+    required: true,
+    unique: true
+  },
+  lessonTitle: {
+    type: String,
+    required: true
+  },
+  note: {
+    type: String,
+    required: true
+  },
+  lessonEndTime: {
+    type: Date,
+    required: true
+  },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
+    type: Date
+  }
+});
+
 const noteSchema = new mongoose.Schema({
   text: {
     type: String,
@@ -8,14 +40,6 @@ const noteSchema = new mongoose.Schema({
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
-  },
-  lessonId: {
-    type: String,
-    default: null
-  },
-  lessonTitle: {
-    type: String,
-    default: null
   },
   createdAt: {
     type: Date,
@@ -61,4 +85,10 @@ const userSchema = new mongoose.Schema({
   }
 });
 
-module.exports = mongoose.model('User', userSchema);
+const LessonNote = mongoose.model('LessonNote', lessonNoteSchema);
+const User = mongoose.model('User', userSchema);
+
+module.exports = {
+  User,
+  LessonNote
+};

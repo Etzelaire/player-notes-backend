@@ -1,6 +1,6 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const User = require('../models/User');
+const { User, LessonNote } = require('../models/User');
 const { auth, isCoach } = require('../middleware/auth');
 const { sendNotificationToPlayer } = require('../utils/notifications');
 
@@ -270,6 +270,86 @@ router.post('/save-token', auth, async (req, res) => {
     res.json({ message: 'Token saved successfully' });
   } catch (error) {
     console.error('Error saving token:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+
+// Get all lesson notes (for coaches)
+router.get('/lesson-notes', auth, isCoach, async (req, res) => {
+  try {
+    const lessonNotes = await LessonNote.find({ createdBy: req.user.id });
+    
+    // Clean up expired lesson notes
+    const now = new Date();
+    const expiredNotes = lessonNotes.filter(note => note.lessonEndTime < now);
+    
+    if (expiredNotes.length > 0) {
+      await LessonNote.deleteMany({
+        _id: { $in: expiredNotes.map(n => n._id) }
+      });
+      console.log(`Deleted ${expiredNotes.length} expired lesson notes`);
+    }
+    
+    // Return only non-expired notes
+    const activeNotes = lessonNotes.filter(note => note.lessonEndTime >= now);
+    res.json(activeNotes);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Save or update a lesson note (for coaches)
+router.post('/lesson-notes', auth, isCoach, async (req, res) => {
+  try {
+    const { lessonId, lessonTitle, note, lessonEndTime } = req.body;
+    
+    console.log('=== SAVING LESSON NOTE ===');
+    console.log('Lesson ID:', lessonId);
+    console.log('Lesson Title:', lessonTitle);
+    console.log('Note:', note);
+    console.log('End Time:', lessonEndTime);
+    
+    // Check if note already exists
+    let lessonNote = await LessonNote.findOne({ lessonId, createdBy: req.user.id });
+    
+    if (lessonNote) {
+      // Update existing note
+      console.log('Updating existing lesson note');
+      lessonNote.note = note;
+      lessonNote.lessonTitle = lessonTitle;
+      lessonNote.lessonEndTime = lessonEndTime;
+      lessonNote.updatedAt = new Date();
+      await lessonNote.save();
+    } else {
+      // Create new note
+      console.log('Creating new lesson note');
+      lessonNote = await LessonNote.create({
+        lessonId,
+        lessonTitle,
+        note,
+        lessonEndTime,
+        createdBy: req.user.id
+      });
+    }
+    
+    console.log('✅ Lesson note saved successfully');
+    res.json(lessonNote);
+  } catch (error) {
+    console.error('Error saving lesson note:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Delete a lesson note (for coaches)
+router.delete('/lesson-notes/:lessonId', auth, isCoach, async (req, res) => {
+  try {
+    const { lessonId } = req.params;
+    
+    await LessonNote.deleteOne({ lessonId, createdBy: req.user.id });
+    
+    res.json({ message: 'Lesson note deleted' });
+  } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
