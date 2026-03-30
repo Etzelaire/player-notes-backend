@@ -275,27 +275,62 @@ router.post('/save-token', auth, async (req, res) => {
 });
 
 
-// Get all lesson notes (for coaches)
-router.get('/lesson-notes', auth, isCoach, async (req, res) => {
+// Save or update a lesson note (for coaches)
+router.post('/lesson-notes', auth, isCoach, async (req, res) => {
   try {
-    const lessonNotes = await LessonNote.find({ createdBy: req.user.id });
+    const { lessonId, lessonTitle, note, lessonEndTime } = req.body;
     
-    // Clean up expired lesson notes
-    const now = new Date();
-    const expiredNotes = lessonNotes.filter(note => note.lessonEndTime < now);
+    console.log('===========================================');
+    console.log('=== SAVING LESSON NOTE ===');
+    console.log('Coach ID:', req.user.id);
+    console.log('Lesson ID:', lessonId);
+    console.log('Lesson Title:', lessonTitle);
+    console.log('Note:', note);
+    console.log('End Time:', lessonEndTime);
     
-    if (expiredNotes.length > 0) {
-      await LessonNote.deleteMany({
-        _id: { $in: expiredNotes.map(n => n._id) }
+    // Check if note already exists for this coach and lesson
+    let lessonNote = await LessonNote.findOne({ 
+      lessonId, 
+      createdBy: req.user.id 
+    });
+    
+    if (lessonNote) {
+      // Update existing note
+      console.log('Found existing note, updating...');
+      lessonNote.note = note;
+      lessonNote.lessonTitle = lessonTitle;
+      lessonNote.lessonEndTime = lessonEndTime;
+      lessonNote.updatedAt = new Date();
+      await lessonNote.save();
+      console.log('✅ Updated existing note');
+    } else {
+      // Create new note
+      console.log('Creating new lesson note...');
+      lessonNote = await LessonNote.create({
+        lessonId,
+        lessonTitle,
+        note,
+        lessonEndTime,
+        createdBy: req.user.id
       });
-      console.log(`Deleted ${expiredNotes.length} expired lesson notes`);
+      console.log('✅ Created new note');
     }
     
-    // Return only non-expired notes
-    const activeNotes = lessonNotes.filter(note => note.lessonEndTime >= now);
-    res.json(activeNotes);
+    console.log('Saved note:', lessonNote);
+    console.log('===========================================');
+    
+    res.json(lessonNote);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('===========================================');
+    console.error('❌ ERROR saving lesson note:', error);
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('===========================================');
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message,
+      details: error.toString()
+    });
   }
 });
 

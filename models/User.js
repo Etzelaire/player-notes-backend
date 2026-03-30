@@ -3,8 +3,7 @@ const mongoose = require('mongoose');
 const lessonNoteSchema = new mongoose.Schema({
   lessonId: {
     type: String,
-    required: true,
-    unique: true
+    required: true
   },
   lessonTitle: {
     type: String,
@@ -31,6 +30,9 @@ const lessonNoteSchema = new mongoose.Schema({
     type: Date
   }
 });
+
+// Make lessonId unique per coach, not globally unique
+lessonNoteSchema.index({ lessonId: 1, createdBy: 1 }, { unique: true });
 
 const noteSchema = new mongoose.Schema({
   text: {
