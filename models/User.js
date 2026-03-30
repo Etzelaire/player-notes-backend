@@ -9,6 +9,14 @@ const noteSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
+  lessonId: {
+    type: String,
+    default: null
+  },
+  lessonTitle: {
+    type: String,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now

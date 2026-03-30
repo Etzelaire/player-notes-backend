@@ -59,7 +59,7 @@ router.get('/search-players', auth, isCoach, async (req, res) => {
 // Add note to a student (coach only)
 router.post('/players/:playerId/notes', auth, isCoach, async (req, res) => {
   try {
-    const { text } = req.body;
+    const { text, lessonId, lessonTitle } = req.body;
     const { playerId } = req.params;
 
     const player = await User.findById(playerId);
@@ -67,8 +67,28 @@ router.post('/players/:playerId/notes', auth, isCoach, async (req, res) => {
       return res.status(404).json({ message: 'Player not found' });
     }
 
+    // If this is a lesson note, check if one already exists
+    if (lessonId) {
+      const existingLessonNoteIndex = player.notes.findIndex(
+        note => note.lessonId === lessonId
+      );
+      
+      if (existingLessonNoteIndex !== -1) {
+        // Update existing lesson note
+        player.notes[existingLessonNoteIndex].text = text;
+        player.notes[existingLessonNoteIndex].updatedAt = new Date();
+        await player.save();
+        
+        console.log('Updated existing lesson note');
+        return res.json(player);
+      }
+    }
+
+    // Add new note
     player.notes.push({
       text,
+      lessonId: lessonId || null,
+      lessonTitle: lessonTitle || null,
       createdBy: req.user.id,
       createdAt: new Date()
     });
