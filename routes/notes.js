@@ -62,6 +62,12 @@ router.post('/players/:playerId/notes', auth, isCoach, async (req, res) => {
     const { text, lessonId, lessonTitle } = req.body;
     const { playerId } = req.params;
 
+    console.log('=== ADDING NOTE ===');
+    console.log('Player ID:', playerId);
+    console.log('Text:', text);
+    console.log('Lesson ID:', lessonId);
+    console.log('Lesson Title:', lessonTitle);
+
     const player = await User.findById(playerId);
     if (!player || player.role !== 'player') {
       return res.status(404).json({ message: 'Player not found' });
@@ -75,16 +81,18 @@ router.post('/players/:playerId/notes', auth, isCoach, async (req, res) => {
       
       if (existingLessonNoteIndex !== -1) {
         // Update existing lesson note
+        console.log('Updating existing lesson note at index:', existingLessonNoteIndex);
         player.notes[existingLessonNoteIndex].text = text;
         player.notes[existingLessonNoteIndex].updatedAt = new Date();
         await player.save();
         
-        console.log('Updated existing lesson note');
+        console.log('Updated lesson note successfully');
         return res.json(player);
       }
     }
 
     // Add new note
+    console.log('Creating new note');
     player.notes.push({
       text,
       lessonId: lessonId || null,
@@ -94,17 +102,12 @@ router.post('/players/:playerId/notes', auth, isCoach, async (req, res) => {
     });
 
     await player.save();
+    console.log('New note added successfully');
 
-    console.log('=== SENDING NOTIFICATION ===');
-    console.log('Player:', player.name);
-    console.log('Player FCM Token:', player.fcmToken);
-
+    // Send notification logic here...
     if (player.fcmToken) {
       try {
         const coach = await User.findById(req.user.id);
-        console.log('Coach:', coach.name);
-        console.log('Note text:', text.substring(0, 50));
-        
         await sendNotificationToPlayer(
           player.fcmToken,
           'New Note from Coach',
@@ -118,12 +121,11 @@ router.post('/players/:playerId/notes', auth, isCoach, async (req, res) => {
       } catch (notifError) {
         console.error('❌ Error sending notification:', notifError);
       }
-    } else {
-      console.log('⚠️ Player has no FCM token:', player.name);
     }
 
     res.json(player);
   } catch (error) {
+    console.error('Error in add note route:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
