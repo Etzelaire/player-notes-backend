@@ -1,12 +1,36 @@
+require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-require('dotenv').config();
+const admin = require('firebase-admin');
 
 const authRoutes = require('./routes/auth');
 const notesRoutes = require('./routes/notes');
 
 const app = express();
+
+// Initialize Firebase Admin
+let serviceAccount;
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  console.log('Using FIREBASE_SERVICE_ACCOUNT from environment');
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+} else {
+  console.log('Using firebase-service-account.json file');
+  try {
+    serviceAccount = require('./firebase-service-account.json');
+  } catch (error) {
+    console.log('⚠️ Firebase service account not found, push notifications will not work');
+  }
+}
+
+if (serviceAccount) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+  });
+  console.log('✅ Firebase Admin initialized successfully');
+} else {
+  console.log('⚠️ Firebase Admin not initialized - push notifications disabled');
+}
 
 // Middleware
 app.use(cors());
