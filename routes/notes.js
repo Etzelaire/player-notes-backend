@@ -3,18 +3,53 @@ const bcrypt = require('bcryptjs');
 const { User, LessonNote } = require('../models/User');
 const { auth, isCoach } = require('../middleware/auth');
 const { sendNotificationToPlayer } = require('../utils/notifications');
+const mongoose = require('mongoose');
 
 const router = express.Router();
+
+// ═══════════════════════════════════════════════════════
+// PLAYER ROUTES
+// ═══════════════════════════════════════════════════════
 
 // Get my notes (for players)
 router.get('/my-notes', auth, async (req, res) => {
   try {
+    console.log('═══════════════════════════════════════');
+    console.log('📥 GET /my-notes called');
+    console.log('Player ID:', req.user.id);
+    
     const user = await User.findById(req.user.id).select('name notes');
+    
+    console.log('Player:', user.name);
+    console.log('Notes count:', user.notes.length);
+    
+    if (user.notes.length > 0) {
+      console.log('First 3 notes:');
+      user.notes.slice(0, 3).forEach((note, i) => {
+        console.log(`  Note ${i}:`, {
+          id: note._id,
+          badge: note.performanceBadge,
+          text: note.text.substring(0, 30)
+        });
+      });
+    }
+    
+    console.log('Sending response with structure:', {
+      name: user.name,
+      notesCount: user.notes.length
+    });
+    console.log('═══════════════════════════════════════');
+    
     res.json(user);
   } catch (error) {
+    console.error('Error loading notes:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
+
+// ═══════════════════════════════════════════════════════
+// COACH ROUTES
+// ═══════════════════════════════════════════════════════
 
 // Get coach's students (for coaches)
 router.get('/players', auth, isCoach, async (req, res) => {
@@ -56,86 +91,95 @@ router.get('/search-players', auth, isCoach, async (req, res) => {
   }
 });
 
-// Add note to a student (coach only)
+// Add note to a student (coach only) - RAW MONGODB VERSION
 router.post('/players/:playerId/notes', auth, isCoach, async (req, res) => {
   try {
-    const { text, lessonId, lessonTitle } = req.body;
+    const { text, lessonId, lessonTitle, performanceBadge, noteType } = req.body;
     const { playerId } = req.params;
 
-    console.log('===========================================');
-    console.log('=== ADDING/UPDATING NOTE ===');
-    console.log('Player ID:', playerId);
-    console.log('Text length:', text?.length);
-    console.log('Lesson ID:', lessonId);
-    console.log('Lesson Title:', lessonTitle);
-    console.log('===========================================');
+    console.log('═══════════════════════════════════════════════════════════');
+    console.log('🔵 POST - ADDING NOTE');
+    console.log('Badge:', performanceBadge);
+    console.log('Type:', noteType);
+    console.log('═══════════════════════════════════════════════════════════');
 
+    // Validate player exists
     const player = await User.findById(playerId);
     if (!player || player.role !== 'player') {
-      console.log('ERROR: Player not found or not a player role');
       return res.status(404).json({ message: 'Player not found' });
     }
 
-    console.log('Player found:', player.name);
-    console.log('Current notes count:', player.notes.length);
-    
-    // If this is a lesson note, check if one already exists
+    // Check for existing lesson note
     if (lessonId) {
-      console.log('This is a LESSON note, checking for existing...');
+      const existingIndex = player.notes.findIndex(n => n.lessonId === lessonId);
       
-      // Log all existing notes with lessonId
-      player.notes.forEach((note, index) => {
-        console.log(`Note ${index}: lessonId=${note.lessonId}, lessonTitle=${note.lessonTitle}`);
-      });
-      
-      const existingLessonNoteIndex = player.notes.findIndex(
-        note => note.lessonId === lessonId
-      );
-      
-      console.log('Existing note index:', existingLessonNoteIndex);
-      
-      if (existingLessonNoteIndex !== -1) {
-        // Update existing lesson note
-        console.log('UPDATING EXISTING lesson note at index:', existingLessonNoteIndex);
-        console.log('Old text:', player.notes[existingLessonNoteIndex].text);
-        console.log('New text:', text);
+      if (existingIndex !== -1) {
+        // Update existing lesson note using raw MongoDB
+        const result = await User.updateOne(
+          { 
+            _id: playerId,
+            'notes._id': player.notes[existingIndex]._id
+          },
+          {
+            $set: {
+              'notes.$.text': text,
+              'notes.$.performanceBadge': performanceBadge || null,
+              'notes.$.noteType': noteType || null,
+              'notes.$.updatedAt': new Date()
+            }
+          }
+        );
         
-        player.notes[existingLessonNoteIndex].text = text;
-        player.notes[existingLessonNoteIndex].updatedAt = new Date();
-        
-        await player.save();
-        
-        console.log('Note updated successfully');
-        console.log('Updated note:', player.notes[existingLessonNoteIndex]);
-        console.log('===========================================');
-        
-        return res.json(player);
-      } else {
-        console.log('NO existing note found, creating NEW lesson note');
+        console.log('✅ Updated existing lesson note');
+        const updatedPlayer = await User.findById(playerId);
+        return res.json(updatedPlayer);
       }
-    } else {
-      console.log('This is a REGULAR note (no lessonId)');
     }
 
-    // Add new note
-    console.log('CREATING NEW note');
-    const newNote = {
-      text,
-      lessonId: lessonId || null,
-      lessonTitle: lessonTitle || null,
-      createdBy: req.user.id,
-      createdAt: new Date()
-    };
+    // Create new note with explicit _id
+    const newNoteId = new mongoose.Types.ObjectId();
+    const now = new Date();
     
-    console.log('New note object:', newNote);
-    
-    player.notes.push(newNote);
+    // Use raw MongoDB $push with ALL fields explicitly
+    const result = await User.updateOne(
+      { _id: playerId },
+      {
+        $push: {
+          notes: {
+            _id: newNoteId,
+            text: text,
+            performanceBadge: performanceBadge || null,
+            noteType: noteType || null,
+            lessonId: lessonId || null,
+            lessonTitle: lessonTitle || null,
+            createdBy: new mongoose.Types.ObjectId(req.user.id),
+            createdAt: now,
+            updatedAt: null
+          }
+        }
+      }
+    );
 
-    await player.save();
+    if (result.modifiedCount === 0) {
+      console.error('❌ MongoDB update failed');
+      return res.status(500).json({ message: 'Failed to save note' });
+    }
+
+    console.log('✅ MongoDB $push successful');
+
+    // Verify what was actually saved
+    const verifyPlayer = await User.findById(playerId);
+    const savedNote = verifyPlayer.notes.id(newNoteId);
     
-    console.log('New note added successfully');
-    console.log('Total notes now:', player.notes.length);
-    console.log('===========================================');
+    console.log('───────────────────────────────────────');
+    console.log('VERIFICATION:');
+    console.log('  Badge saved:', savedNote.performanceBadge);
+    console.log('  Type saved:', savedNote.noteType);
+    console.log('  Badge is null?', savedNote.performanceBadge === null);
+    console.log('  Type is null?', savedNote.noteType === null);
+    console.log('  Badge is undefined?', savedNote.performanceBadge === undefined);
+    console.log('  Type is undefined?', savedNote.noteType === undefined);
+    console.log('═══════════════════════════════════════════════════════════');
 
     // Send notification
     if (player.fcmToken) {
@@ -144,21 +188,23 @@ router.post('/players/:playerId/notes', auth, isCoach, async (req, res) => {
         await sendNotificationToPlayer(
           player.fcmToken,
           'New Note from Coach',
-          `${coach.name}: ${text.substring(0, 100)}${text.length > 100 ? '...' : ''}`,
-          {
-            type: 'new_note',
-            noteId: player.notes[player.notes.length - 1]._id.toString()
-          }
+          `${coach.name}: ${text.substring(0, 100)}`,
+          { type: 'new_note', noteId: newNoteId.toString() }
         );
-        console.log('✅ Notification sent to:', player.name);
       } catch (notifError) {
-        console.error('❌ Error sending notification:', notifError);
+        console.error('⚠️ Notification error:', notifError.message);
       }
     }
 
-    res.json(player);
+    // Return fresh player data
+    const freshPlayer = await User.findById(playerId);
+    res.json(freshPlayer);
+    
   } catch (error) {
-    console.error('ERROR in add note route:', error);
+    console.error('═══════════════════════════════════════════════════════════');
+    console.error('❌ ERROR:', error.message);
+    console.error('Stack:', error.stack);
+    console.error('═══════════════════════════════════════════════════════════');
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -185,8 +231,14 @@ router.delete('/players/:playerId/notes/:noteId', auth, isCoach, async (req, res
 // Update/edit a note (coach only)
 router.put('/players/:playerId/notes/:noteId', auth, isCoach, async (req, res) => {
   try {
-    const { text } = req.body;
+    const { text, performanceBadge, noteType } = req.body;  // ADD noteType
     const { playerId, noteId } = req.params;
+
+    console.log('=== UPDATING NOTE ===');
+    console.log('Note ID:', noteId);
+    console.log('New text:', text);
+    console.log('New badge:', performanceBadge);
+    console.log('New type:', noteType);  // ADD THIS
 
     const player = await User.findById(playerId);
     if (!player) {
@@ -199,11 +251,17 @@ router.put('/players/:playerId/notes/:noteId', auth, isCoach, async (req, res) =
     }
 
     note.text = text;
+    note.performanceBadge = performanceBadge !== undefined ? performanceBadge : note.performanceBadge;
+    note.noteType = noteType !== undefined ? noteType : note.noteType;  // ADD THIS
     note.updatedAt = new Date();
     
     await player.save();
+    
+    console.log('Note updated successfully');
+    
     res.json(player);
   } catch (error) {
+    console.error('Error updating note:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -274,7 +332,9 @@ router.post('/save-token', auth, async (req, res) => {
   }
 });
 
-// ==================== LESSON NOTES ROUTES ====================
+// ═══════════════════════════════════════════════════════
+// LESSON NOTES ROUTES
+// ═══════════════════════════════════════════════════════
 
 // Get all lesson notes (for coaches)
 router.get('/lesson-notes', auth, isCoach, async (req, res) => {
@@ -286,7 +346,6 @@ router.get('/lesson-notes', auth, isCoach, async (req, res) => {
     
     console.log('Found', lessonNotes.length, 'lesson notes');
     
-    // Clean up expired lesson notes
     const now = new Date();
     const expiredNotes = lessonNotes.filter(note => note.lessonEndTime < now);
     
@@ -297,7 +356,6 @@ router.get('/lesson-notes', auth, isCoach, async (req, res) => {
       console.log(`Deleted ${expiredNotes.length} expired lesson notes`);
     }
     
-    // Return only non-expired notes
     const activeNotes = lessonNotes.filter(note => note.lessonEndTime >= now);
     console.log('Returning', activeNotes.length, 'active notes');
     console.log('===========================================');
@@ -322,14 +380,12 @@ router.post('/lesson-notes', auth, isCoach, async (req, res) => {
     console.log('Note:', note);
     console.log('End Time:', lessonEndTime);
     
-    // Check if note already exists for this coach and lesson
     let lessonNote = await LessonNote.findOne({ 
       lessonId, 
       createdBy: req.user.id 
     });
     
     if (lessonNote) {
-      // Update existing note
       console.log('Found existing note, updating...');
       lessonNote.note = note;
       lessonNote.lessonTitle = lessonTitle;
@@ -338,7 +394,6 @@ router.post('/lesson-notes', auth, isCoach, async (req, res) => {
       await lessonNote.save();
       console.log('✅ Updated existing note');
     } else {
-      // Create new note
       console.log('Creating new lesson note...');
       lessonNote = await LessonNote.create({
         lessonId,
