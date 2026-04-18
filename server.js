@@ -4,17 +4,12 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const admin = require('firebase-admin');
 
+// Import routes
 const authRoutes = require('./routes/auth');
 const notesRoutes = require('./routes/notes');
 const savedNotesRouter = require('./routes/savedNotes');
 
-
-app.use('/api/auth', authRouter);
-app.use('/api/notes', notesRouter);
-app.use('/api/saved-notes', savedNotesRouter);
-
-
-
+// Initialize Express app FIRST
 const app = express();
 
 // Initialize Firebase Admin only if not already initialized
@@ -48,9 +43,10 @@ if (!admin.apps.length) {
 app.use(cors());
 app.use(express.json());
 
-// Routes
+// Routes - NOW you can use app.use()
 app.use('/api/auth', authRoutes);
 app.use('/api/notes', notesRoutes);
+app.use('/api/saved-notes', savedNotesRouter);
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI)
