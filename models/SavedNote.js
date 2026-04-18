@@ -23,7 +23,7 @@ const savedNoteSchema = new mongoose.Schema({
   sharedWith: [{
     studentId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Player'
+      ref: 'User'
     },
     sharedAt: {
       type: Date,

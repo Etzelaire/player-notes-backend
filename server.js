@@ -8,8 +8,8 @@ const authRoutes = require('./routes/auth');
 const notesRoutes = require('./routes/notes');
 const savedNotesRouter = require('./routes/savedNotes');
 
-// Add with other routes
-app.use('/api/saved-notes', savedNotesRouter);
+// With other app.use() routes (after auth routes)
+app.use('/api/notes', savedNotesRouter);
 
 
 
