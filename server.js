@@ -6,6 +6,12 @@ const admin = require('firebase-admin');
 
 const authRoutes = require('./routes/auth');
 const notesRoutes = require('./routes/notes');
+const savedNotesRouter = require('./routes/savedNotes');
+
+// Add with other routes
+app.use('/api/saved-notes', savedNotesRouter);
+
+
 
 const app = express();
 

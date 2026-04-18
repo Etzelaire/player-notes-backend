@@ -367,6 +367,84 @@ router.get('/lesson-notes', auth, isCoach, async (req, res) => {
   }
 });
 
+
+
+// Check and update milestone progress
+router.post('/check-milestone', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    
+    // Count lesson notes
+    const lessonNotes = user.notes.filter(note => note.noteType === 'lesson');
+    const lessonCount = lessonNotes.length;
+    
+    // Calculate current milestone (10, 20, 30, etc.)
+    const currentMilestone = Math.floor(lessonCount / 10) * 10;
+    
+    // Check if milestone exists and hasn't been celebrated
+    let shouldCelebrate = false;
+    let milestoneData = null;
+    
+    if (currentMilestone > 0) {
+      const milestoneKey = `milestone_${currentMilestone}`;
+      const milestone = user.milestones?.get(milestoneKey);
+      
+      if (!milestone || !milestone.celebrationShown) {
+        // Mark milestone as achieved and celebrated
+        if (!user.milestones) {
+          user.milestones = new Map();
+        }
+        
+        user.milestones.set(milestoneKey, {
+          achieved: true,
+          achievedAt: new Date(),
+          celebrationShown: true
+        });
+        
+        await user.save();
+        
+        shouldCelebrate = true;
+        milestoneData = {
+          milestone: currentMilestone,
+          lessonCount: lessonCount,
+          nextMilestone: currentMilestone + 10
+        };
+        
+        console.log(`🎉 Milestone ${currentMilestone} achieved for user ${user.name}`);
+      }
+    }
+    
+    res.json({
+      shouldCelebrate,
+      milestoneData,
+      lessonCount,
+      nextMilestone: (Math.floor(lessonCount / 10) + 1) * 10,
+      progress: lessonCount % 10
+    });
+    
+  } catch (error) {
+    console.error('Error checking milestone:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Reset milestone celebration (for testing)
+router.post('/reset-milestone/:milestone', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    const milestoneKey = `milestone_${req.params.milestone}`;
+    
+    if (user.milestones?.has(milestoneKey)) {
+      user.milestones.delete(milestoneKey);
+      await user.save();
+    }
+    
+    res.json({ message: `Milestone ${req.params.milestone} reset` });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 // Save or update a lesson note (for coaches)
 router.post('/lesson-notes', auth, isCoach, async (req, res) => {
   try {

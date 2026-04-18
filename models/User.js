@@ -70,6 +70,18 @@ const noteSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
+
+  // ADD MILESTONE TRACKING
+  milestones: {
+    type: Map,
+    of: {
+      achieved: { type: Boolean, default: false },
+      achievedAt: { type: Date, default: null },
+      celebrationShown: { type: Boolean, default: false }
+    },
+    default: {}
+  },
+  
   updatedAt: {
     type: Date,
     default: null
