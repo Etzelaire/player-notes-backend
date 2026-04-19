@@ -9,6 +9,7 @@ const authRoutes = require('./routes/auth');
 const notesRoutes = require('./routes/notes');
 const savedNotesRouter = require('./routes/savedNotes');
 
+
 // Initialize Express app FIRST
 const app = express();
 
