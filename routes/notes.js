@@ -445,10 +445,14 @@ router.post('/reset-milestone/:milestone', auth, async (req, res) => {
   }
 });
 
-// Save or update a lesson note (for coaches)
+// ================================================================
+// UPDATED BACKEND ROUTE IN routes/notes.js
+// Replace the POST /lesson-notes route (around line 393)
+// ================================================================
+
 router.post('/lesson-notes', auth, isCoach, async (req, res) => {
   try {
-    const { lessonId, lessonTitle, note, lessonEndTime } = req.body;
+    const { lessonId, lessonTitle, note, lessonEndTime, performanceBadge, noteType } = req.body;
     
     console.log('===========================================');
     console.log('=== SAVING LESSON NOTE ===');
@@ -457,47 +461,49 @@ router.post('/lesson-notes', auth, isCoach, async (req, res) => {
     console.log('Lesson Title:', lessonTitle);
     console.log('Note:', note);
     console.log('End Time:', lessonEndTime);
+    console.log('Performance Badge:', performanceBadge);  // ← Add this
+    console.log('Note Type:', noteType);                  // ← Add this
     
+    // Check if note already exists for this coach and lesson
     let lessonNote = await LessonNote.findOne({ 
       lessonId, 
       createdBy: req.user.id 
     });
     
     if (lessonNote) {
+      // Update existing note
       console.log('Found existing note, updating...');
       lessonNote.note = note;
       lessonNote.lessonTitle = lessonTitle;
       lessonNote.lessonEndTime = lessonEndTime;
+      lessonNote.performanceBadge = performanceBadge;  // ← Add this
+      lessonNote.noteType = noteType;                  // ← Add this
       lessonNote.updatedAt = new Date();
       await lessonNote.save();
       console.log('✅ Updated existing note');
     } else {
+      // Create new note
       console.log('Creating new lesson note...');
       lessonNote = await LessonNote.create({
         lessonId,
         lessonTitle,
         note,
         lessonEndTime,
-        createdBy: req.user.id
+        performanceBadge,   // ← Add this
+        noteType,           // ← Add this
+        createdBy: req.user.id,
+        createdAt: new Date(),
+        updatedAt: new Date()
       });
-      console.log('✅ Created new note');
+      console.log('✅ Created new lesson note');
     }
     
-    console.log('Saved note:', lessonNote);
     console.log('===========================================');
     
     res.json(lessonNote);
   } catch (error) {
-    console.error('===========================================');
-    console.error('❌ ERROR saving lesson note:', error);
-    console.error('Error name:', error.name);
-    console.error('Error message:', error.message);
-    console.error('===========================================');
-    res.status(500).json({ 
-      message: 'Server error', 
-      error: error.message,
-      details: error.toString()
-    });
+    console.error('Error saving lesson note:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
