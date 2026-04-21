@@ -1,6 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { User, LessonNote } = require('../models/User');
+const SkillRating = require('../models/SkillRating');
 const { auth, isCoach } = require('../middleware/auth');
 const { sendNotificationToPlayer } = require('../utils/notifications');
 const mongoose = require('mongoose');
@@ -802,5 +803,81 @@ router.get('/note-stats/:playerId/:noteId', auth, isCoach, async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════
+// SKILL RATINGS (0-7 coaching feedback)
+// ═══════════════════════════════════════════════════════
+
+// Get all skill ratings for a player
+router.get('/skill-ratings/:playerId', auth, isCoach, async (req, res) => {
+  try {
+    const { playerId } = req.params;
+    const coachId = req.user.id;
+
+    // Verify coach has this player
+    const coach = await User.findById(coachId);
+    if (!coach || !coach.students.includes(playerId)) {
+      return res.status(403).json({ message: 'Access denied. Player not in your roster.' });
+    }
+
+    // Find or create skill rating document
+    let skillRating = await SkillRating.findOne({ coachId, playerId });
+
+    if (!skillRating) {
+      skillRating = { ratings: {} };
+    }
+
+    res.json(skillRating.ratings || {});
+  } catch (error) {
+    console.error('Error fetching skill ratings:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Set skill rating for a player
+router.post('/skill-ratings/:playerId/:skillId', auth, isCoach, async (req, res) => {
+  try {
+    const { playerId, skillId } = req.params;
+    const { rating } = req.body;
+    const coachId = req.user.id;
+
+    // Validate rating is 0-7
+    if (typeof rating !== 'number' || rating < 0 || rating > 7) {
+      return res.status(400).json({ message: 'Rating must be between 0 and 7' });
+    }
+
+    // Verify coach has this player
+    const coach = await User.findById(coachId);
+    if (!coach || !coach.students.includes(playerId)) {
+      return res.status(403).json({ message: 'Access denied. Player not in your roster.' });
+    }
+
+    // Find or create skill rating document
+    let skillRating = await SkillRating.findOne({ coachId, playerId });
+
+    if (!skillRating) {
+      skillRating = new SkillRating({
+        coachId,
+        playerId,
+        ratings: {},
+      });
+    }
+
+    // Update rating
+    if (rating === 0) {
+      // Remove rating if 0
+      skillRating.ratings.delete(skillId);
+    } else {
+      skillRating.ratings.set(skillId, rating);
+    }
+
+    skillRating.lastUpdated = new Date();
+    await skillRating.save();
+
+    res.json({ success: true, rating, skillId });
+  } catch (error) {
+    console.error('Error setting skill rating:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
 
 module.exports = router;
