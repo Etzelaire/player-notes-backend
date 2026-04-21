@@ -808,25 +808,45 @@ router.get('/note-stats/:playerId/:noteId', auth, isCoach, async (req, res) => {
 // ═══════════════════════════════════════════════════════
 
 // Get all skill ratings for a player
-router.get('/skill-ratings/:playerId', auth, isCoach, async (req, res) => {
+router.get('/skill-ratings/:playerId', auth, async (req, res) => {
   try {
     const { playerId } = req.params;
-    const coachId = req.user.id;
+    const userId = req.user.id;
+    const userRole = req.user.role;
 
-    // Verify coach has this player
-    const coach = await User.findById(coachId);
-    if (!coach || !coach.students.includes(playerId)) {
-      return res.status(403).json({ message: 'Access denied. Player not in your roster.' });
+    // Check if user is the player viewing their own ratings, or a coach viewing a student's ratings
+    if (userRole === 'player') {
+      if (userId !== playerId) {
+        return res.status(403).json({ message: 'Access denied. You can only view your own ratings.' });
+      }
+    } else if (userRole === 'coach') {
+      // Verify coach has this player
+      const coach = await User.findById(userId);
+      if (!coach || !coach.students.includes(playerId)) {
+        return res.status(403).json({ message: 'Access denied. Player not in your roster.' });
+      }
+    } else {
+      return res.status(403).json({ message: 'Access denied.' });
     }
 
-    // Find or create skill rating document
-    let skillRating = await SkillRating.findOne({ coachId, playerId });
+    // Find skill ratings for this player from any coach
+    const skillRatings = await SkillRating.find({ playerId });
 
-    if (!skillRating) {
-      skillRating = { ratings: {} };
-    }
+    // Merge all ratings (in case multiple coaches have rated)
+    const allRatings = {};
+    skillRatings.forEach(sr => {
+      // Convert Map to plain object if needed
+      if (sr.ratings instanceof Map) {
+        sr.ratings.forEach((value, key) => {
+          allRatings[key] = value;
+        });
+      } else {
+        Object.assign(allRatings, sr.ratings.toObject ? sr.ratings.toObject() : sr.ratings);
+      }
+    });
 
-    res.json(skillRating.ratings || {});
+    console.log('📊 Skill ratings for player', playerId, ':', allRatings);
+    res.json(allRatings || {});
   } catch (error) {
     console.error('Error fetching skill ratings:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -862,17 +882,23 @@ router.post('/skill-ratings/:playerId/:skillId', auth, isCoach, async (req, res)
       });
     }
 
-    // Update rating
+    // Update rating - ensure ratings is treated as an object
+    if (!skillRating.ratings) {
+      skillRating.ratings = {};
+    }
+
     if (rating === 0) {
       // Remove rating if 0
-      skillRating.ratings.delete(skillId);
+      delete skillRating.ratings[skillId];
     } else {
-      skillRating.ratings.set(skillId, rating);
+      skillRating.ratings[skillId] = rating;
     }
 
     skillRating.lastUpdated = new Date();
+    skillRating.markModified('ratings');
     await skillRating.save();
 
+    console.log('💾 Saved skill rating:', { coachId, playerId, skillId, rating });
     res.json({ success: true, rating, skillId });
   } catch (error) {
     console.error('Error setting skill rating:', error);
