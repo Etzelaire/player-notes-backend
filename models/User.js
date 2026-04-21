@@ -20,6 +20,17 @@ const lessonNoteSchema = new mongoose.Schema({
     type: Date,
     required: true
   },
+  // ✅ ADD THESE FIELDS FOR LESSON NOTE BADGES
+  performanceBadge: {
+    type: String,
+    enum: ['excellent', 'good', 'average', 'needs_work', 'keep_trying', null],
+    default: null
+  },
+  noteType: {
+    type: String,
+    enum: ['lesson', 'wisdom', null],
+    default: 'lesson'  // ← Auto-default to 'lesson'
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -49,9 +60,9 @@ const noteSchema = new mongoose.Schema({
     enum: ['excellent', 'good', 'average', 'needs_work', 'keep_trying', null],
     default: null
   },
-  noteType: {  // ADD THIS
+  noteType: {
     type: String,
-    enum: ['lesson', 'wisdom', null],
+    enum: ['lesson', 'wisdom', 'general', null],  // ← Add 'general'
     default: null
   },
   lessonId: {
@@ -70,19 +81,25 @@ const noteSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
-
-  // ADD MILESTONE TRACKING
-  milestones: {
-    type: Map,
-    of: {
-      achieved: { type: Boolean, default: false },
-      achievedAt: { type: Date, default: null },
-      celebrationShown: { type: Boolean, default: false }
-    },
-    default: {}
-  },
-  
   updatedAt: {
+    type: Date,
+    default: null
+  },
+
+  // ✅ TRACKING FIELDS FOR ANALYTICS
+  viewCount: { 
+    type: Number, 
+    default: 0 
+  },
+  readBy: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  lastReadAt: { 
+    type: Date, 
+    default: null 
+  },
+  lastViewedAt: {
     type: Date,
     default: null
   }

@@ -526,4 +526,281 @@ router.delete('/lesson-notes/:lessonId', auth, isCoach, async (req, res) => {
   }
 });
 
+
+// ================================================================
+// ANALYTICS ROUTE - ADD TO routes/notes.js
+// Add this BEFORE module.exports = router;
+// ================================================================
+
+// ═══════════════════════════════════════════════════════
+// COACH ANALYTICS ENDPOINT
+// ═══════════════════════════════════════════════════════
+router.get('/coach-analytics', auth, isCoach, async (req, res) => {
+  try {
+    console.log('=== FETCHING COACH ANALYTICS ===');
+    console.log('Coach ID:', req.user.id);
+
+    // Get all students for this coach
+    const coach = await User.findById(req.user.id).populate('students');
+    const students = coach.students || [];
+
+    // ═══════════════════════════════════════════════════════
+    // 1. MILESTONE TRACKING - Students with 10+ lesson notes
+    // ═══════════════════════════════════════════════════════
+    const milestoneData = await Promise.all(
+      students.map(async (student) => {
+        // Count lesson notes for this student
+        const lessonNotesCount = student.notes.filter(
+          note => note.noteType === 'lesson'
+        ).length;
+
+        return {
+          studentId: student._id,
+          studentName: student.name,
+          studentEmail: student.email,
+          lessonCount: lessonNotesCount,
+          hasMilestone: lessonNotesCount >= 10,
+          nextMilestone: Math.ceil(lessonNotesCount / 10) * 10
+        };
+      })
+    );
+
+    // ═══════════════════════════════════════════════════════
+    // 2. STUDENT RANKING - Everyone with >10 lessons
+    // ═══════════════════════════════════════════════════════
+    const rankings = milestoneData
+      .filter(student => student.lessonCount > 10)
+      .sort((a, b) => b.lessonCount - a.lessonCount)
+      .map((student, index) => ({
+        rank: index + 1,
+        studentId: student.studentId,
+        studentName: student.studentName,
+        studentEmail: student.studentEmail,
+        lessonCount: student.lessonCount,
+        badge: index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🎯'
+      }));
+
+    // ═══════════════════════════════════════════════════════
+    // 3. READ RECEIPTS & VIEW COUNT PER STUDENT
+    // ═══════════════════════════════════════════════════════
+    const noteStats = await Promise.all(
+      students.map(async (student) => {
+        const noteAnalytics = student.notes.map(note => {
+          const readCount = note.readBy ? note.readBy.length : 0;
+          const viewCount = note.viewCount || 0;
+          const isRead = note.readBy && note.readBy.length > 0;
+
+          return {
+            noteId: note._id,
+            noteText: note.text.substring(0, 50) + (note.text.length > 50 ? '...' : ''),
+            noteType: note.noteType || 'general',
+            performanceBadge: note.performanceBadge || null,
+            createdAt: note.createdAt,
+            viewCount: viewCount,
+            readCount: readCount,
+            isRead: isRead,
+            lastReadAt: note.lastReadAt || null
+          };
+        });
+
+        const totalNotes = student.notes.length;
+        const totalRead = noteAnalytics.filter(n => n.isRead).length;
+        const totalViews = noteAnalytics.reduce((sum, n) => sum + n.viewCount, 0);
+        const readPercentage = totalNotes > 0 ? Math.round((totalRead / totalNotes) * 100) : 0;
+
+        return {
+          studentId: student._id,
+          studentName: student.name,
+          studentEmail: student.email,
+          totalNotes: totalNotes,
+          totalRead: totalRead,
+          totalUnread: totalNotes - totalRead,
+          totalViews: totalViews,
+          readPercentage: readPercentage,
+          notes: noteAnalytics.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        };
+      })
+    );
+
+    // ═══════════════════════════════════════════════════════
+    // 4. AGGREGATE STATISTICS
+    // ═══════════════════════════════════════════════════════
+    const totalStudents = students.length;
+    const studentsWithMilestones = milestoneData.filter(s => s.hasMilestone).length;
+    const totalLessonNotes = milestoneData.reduce((sum, s) => sum + s.lessonCount, 0);
+    const totalNotesCreated = noteStats.reduce((sum, s) => sum + s.totalNotes, 0);
+    const totalNotesRead = noteStats.reduce((sum, s) => sum + s.totalRead, 0);
+    const overallReadRate = totalNotesCreated > 0 
+      ? Math.round((totalNotesRead / totalNotesCreated) * 100) 
+      : 0;
+
+    // ═══════════════════════════════════════════════════════
+    // RESPONSE
+    // ═══════════════════════════════════════════════════════
+    const analytics = {
+      overview: {
+        totalStudents,
+        studentsWithMilestones,
+        totalLessonNotes,
+        totalNotesCreated,
+        totalNotesRead,
+        totalNotesUnread: totalNotesCreated - totalNotesRead,
+        overallReadRate
+      },
+      milestones: milestoneData.sort((a, b) => b.lessonCount - a.lessonCount),
+      rankings: rankings,
+      noteStats: noteStats,
+      generatedAt: new Date()
+    };
+
+    console.log('✅ Analytics generated successfully');
+    console.log('Total students:', totalStudents);
+    console.log('Students with milestones:', studentsWithMilestones);
+    console.log('Overall read rate:', overallReadRate + '%');
+
+    res.json(analytics);
+  } catch (error) {
+    console.error('Error fetching coach analytics:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// ================================================================
+// NOTE TRACKING ROUTES - ADD TO routes/notes.js
+// Add these routes for tracking views and reads
+// ================================================================
+
+// ═══════════════════════════════════════════════════════
+// TRACK NOTE VIEW (when player opens note modal)
+// ═══════════════════════════════════════════════════════
+router.post('/track-view/:noteId', auth, async (req, res) => {
+  try {
+    const { noteId } = req.params;
+    const playerId = req.user.id;
+
+    console.log('=== TRACKING NOTE VIEW ===');
+    console.log('Player ID:', playerId);
+    console.log('Note ID:', noteId);
+
+    // Find the player
+    const player = await User.findById(playerId);
+    if (!player) {
+      return res.status(404).json({ message: 'Player not found' });
+    }
+
+    // Find the specific note
+    const note = player.notes.id(noteId);
+    if (!note) {
+      return res.status(404).json({ message: 'Note not found' });
+    }
+
+    // Increment view count
+    note.viewCount = (note.viewCount || 0) + 1;
+    note.lastViewedAt = new Date();
+
+    await player.save();
+
+    console.log('✅ View tracked - Total views:', note.viewCount);
+
+    res.json({ 
+      success: true, 
+      viewCount: note.viewCount,
+      lastViewedAt: note.lastViewedAt
+    });
+  } catch (error) {
+    console.error('Error tracking view:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════
+// TRACK NOTE READ (when player clicks "Got it!")
+// ═══════════════════════════════════════════════════════
+router.post('/track-read/:noteId', auth, async (req, res) => {
+  try {
+    const { noteId } = req.params;
+    const playerId = req.user.id;
+
+    console.log('=== TRACKING NOTE READ ===');
+    console.log('Player ID:', playerId);
+    console.log('Note ID:', noteId);
+
+    // Find the player
+    const player = await User.findById(playerId);
+    if (!player) {
+      return res.status(404).json({ message: 'Player not found' });
+    }
+
+    // Find the specific note
+    const note = player.notes.id(noteId);
+    if (!note) {
+      return res.status(404).json({ message: 'Note not found' });
+    }
+
+    // Check if already marked as read by this player
+    const alreadyRead = note.readBy && note.readBy.some(
+      id => id.toString() === playerId.toString()
+    );
+
+    if (!alreadyRead) {
+      // Initialize readBy array if it doesn't exist
+      if (!note.readBy) {
+        note.readBy = [];
+      }
+
+      // Add player to readBy array
+      note.readBy.push(playerId);
+      note.lastReadAt = new Date();
+
+      await player.save();
+
+      console.log('✅ Note marked as read - Total reads:', note.readBy.length);
+    } else {
+      console.log('ℹ️ Note already marked as read by this player');
+    }
+
+    res.json({ 
+      success: true, 
+      readCount: note.readBy ? note.readBy.length : 0,
+      lastReadAt: note.lastReadAt,
+      alreadyRead
+    });
+  } catch (error) {
+    console.error('Error tracking read:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════
+// GET NOTE STATISTICS (for a specific note)
+// ═══════════════════════════════════════════════════════
+router.get('/note-stats/:playerId/:noteId', auth, isCoach, async (req, res) => {
+  try {
+    const { playerId, noteId } = req.params;
+
+    const player = await User.findById(playerId);
+    if (!player) {
+      return res.status(404).json({ message: 'Player not found' });
+    }
+
+    const note = player.notes.id(noteId);
+    if (!note) {
+      return res.status(404).json({ message: 'Note not found' });
+    }
+
+    res.json({
+      noteId: note._id,
+      viewCount: note.viewCount || 0,
+      readCount: note.readBy ? note.readBy.length : 0,
+      isRead: note.readBy && note.readBy.length > 0,
+      lastViewedAt: note.lastViewedAt,
+      lastReadAt: note.lastReadAt
+    });
+  } catch (error) {
+    console.error('Error fetching note stats:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+
 module.exports = router;
