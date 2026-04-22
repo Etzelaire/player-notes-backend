@@ -849,11 +849,14 @@ router.get('/skill-ratings/:playerId', auth, async (req, res) => {
     let query = { playerId: playerIdObj };
     if (userRole === 'coach') {
       query.coachId = userIdObj; // Coach only sees their own ratings
-      console.log('📊 Querying skill ratings:', { query: { playerId: playerIdObj.toString(), coachId: userIdObj.toString() } });
+      console.log('📊 [COACH] Querying skill ratings:', { query: { playerId: playerIdObj.toString(), coachId: userIdObj.toString() } });
+    } else {
+      // Player - fetch ratings from ALL coaches
+      console.log('📊 [PLAYER] Querying skill ratings:', { query: { playerId: playerIdObj.toString() } });
     }
 
     const skillRatings = await SkillRating.find(query);
-    console.log('📦 Query results:', { query: { playerId: playerIdObj.toString(), coachId: userIdObj ? userIdObj.toString() : 'n/a' }, foundDocuments: skillRatings.length });
+    console.log('📦 Query results:', { userRole, query: query, foundDocuments: skillRatings.length, playerIdObj: playerIdObj.toString() });
 
     if (skillRatings.length > 0) {
       console.log('📊 Document details:', skillRatings.map(sr => ({
@@ -862,10 +865,11 @@ router.get('/skill-ratings/:playerId', auth, async (req, res) => {
         playerId: sr.playerId?.toString(),
         ratings: sr.ratings,
         ratingsType: sr.ratings instanceof Map ? 'Map' : 'Object',
-        ratingsKeys: sr.ratings ? Object.keys(sr.ratings) : []
+        ratingsSize: sr.ratings instanceof Map ? sr.ratings.size : Object.keys(sr.ratings || {}).length,
+        ratingsKeys: sr.ratings instanceof Map ? Array.from(sr.ratings.keys()) : Object.keys(sr.ratings || {})
       })));
     } else {
-      console.log('⚠️  No skill rating documents found for:', { playerId, userRole, query });
+      console.log('⚠️  No skill rating documents found for:', { playerId: playerIdObj.toString(), userRole, query });
     }
 
     // Merge all ratings (in case multiple coaches have rated)
