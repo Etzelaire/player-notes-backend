@@ -948,16 +948,17 @@ router.post('/skill-ratings/:playerId/:skillId', auth, isCoach, async (req, res)
       });
     }
 
-    // Update rating - ensure ratings is treated as an object
+    // Update rating - use Map.set() for Mongoose Map type
     if (!skillRating.ratings) {
-      skillRating.ratings = {};
+      skillRating.ratings = new Map();
     }
 
     if (rating === 0) {
       // Remove rating if 0
-      delete skillRating.ratings[skillId];
+      skillRating.ratings.delete(skillId);
     } else {
-      skillRating.ratings[skillId] = rating;
+      // Use .set() for Mongoose Map to ensure change is tracked
+      skillRating.ratings.set(skillId, rating);
     }
 
     skillRating.lastUpdated = new Date();
