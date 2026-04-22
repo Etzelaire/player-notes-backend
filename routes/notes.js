@@ -1023,4 +1023,29 @@ router.post('/skill-ratings/:playerId/:skillId', auth, isCoach, async (req, res)
   }
 });
 
+// ═══════════════════════════════════════════════════════
+// DIAGNOSTIC: List all skill ratings in database
+// ═══════════════════════════════════════════════════════
+router.get('/diagnostic/all-skill-ratings', auth, async (req, res) => {
+  try {
+    const allRatings = await SkillRating.find().lean();
+    console.log('🔍 [DIAGNOSTIC] All SkillRating documents:', allRatings);
+
+    res.json({
+      totalCount: allRatings.length,
+      documents: allRatings.map(doc => ({
+        _id: doc._id,
+        coachId: doc.coachId,
+        playerId: doc.playerId,
+        ratingsCount: doc.ratings ? Object.keys(doc.ratings).length : 0,
+        ratings: doc.ratings,
+        lastUpdated: doc.lastUpdated
+      }))
+    });
+  } catch (error) {
+    console.error('❌ Diagnostic error:', error);
+    res.status(500).json({ message: 'Error', error: error.message });
+  }
+});
+
 module.exports = router;
