@@ -822,15 +822,32 @@ router.get('/skill-ratings/:playerId', auth, async (req, res) => {
     } else if (userRole === 'coach') {
       // Verify coach has this player
       const coach = await User.findById(userId);
-      if (!coach || !coach.students.includes(playerId)) {
+      if (!coach) {
+        return res.status(403).json({ message: 'Coach not found.' });
+      }
+
+      // Properly compare ObjectIds
+      const hasStudent = coach.students.some(studentId =>
+        studentId.toString() === playerId
+      );
+
+      if (!hasStudent) {
+        console.log('❌ Player not in coach roster:', { coachId: userId, playerId, studentIds: coach.students });
         return res.status(403).json({ message: 'Access denied. Player not in your roster.' });
       }
     } else {
       return res.status(403).json({ message: 'Access denied.' });
     }
 
-    // Find skill ratings for this player from any coach
-    const skillRatings = await SkillRating.find({ playerId });
+    console.log('📥 GET /skill-ratings/:playerId called:', { playerId, userId, userRole });
+
+    // Find skill ratings for this player from any coach (or for the coach viewing)
+    let query = { playerId };
+    if (userRole === 'coach') {
+      query.coachId = userId; // Coach only sees their own ratings
+    }
+
+    const skillRatings = await SkillRating.find(query);
 
     // Merge all ratings (in case multiple coaches have rated)
     const allRatings = {};
@@ -860,16 +877,33 @@ router.post('/skill-ratings/:playerId/:skillId', auth, isCoach, async (req, res)
     const { rating } = req.body;
     const coachId = req.user.id;
 
+    console.log('📥 POST /skill-ratings called:', { coachId, playerId, skillId, rating });
+
     // Validate rating is 0-7
     if (typeof rating !== 'number' || rating < 0 || rating > 7) {
+      console.log('❌ Invalid rating value:', rating);
       return res.status(400).json({ message: 'Rating must be between 0 and 7' });
     }
 
     // Verify coach has this player
     const coach = await User.findById(coachId);
-    if (!coach || !coach.students.includes(playerId)) {
+    if (!coach) {
+      console.log('❌ Coach not found:', coachId);
+      return res.status(403).json({ message: 'Coach not found' });
+    }
+
+    // Convert playerId to ObjectId for proper comparison
+    const playerIdObj = mongoose.Types.ObjectId(playerId);
+    const hasStudent = coach.students.some(studentId =>
+      studentId.toString() === playerId
+    );
+
+    if (!hasStudent) {
+      console.log('❌ Player not in coach roster:', { coachId, playerId, studentIds: coach.students });
       return res.status(403).json({ message: 'Access denied. Player not in your roster.' });
     }
+
+    console.log('✅ Coach verified:', { coachId, playerId });
 
     // Find or create skill rating document
     let skillRating = await SkillRating.findOne({ coachId, playerId });
