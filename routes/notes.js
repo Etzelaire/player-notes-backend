@@ -841,11 +841,15 @@ router.get('/skill-ratings/:playerId', auth, async (req, res) => {
 
     console.log('📥 GET /skill-ratings/:playerId called:', { playerId, userId, userRole });
 
+    // Convert to ObjectIds for proper MongoDB querying
+    const playerIdObj = new mongoose.Types.ObjectId(playerId);
+    const userIdObj = new mongoose.Types.ObjectId(userId);
+
     // Find skill ratings for this player from any coach (or for the coach viewing)
-    let query = { playerId };
+    let query = { playerId: playerIdObj };
     if (userRole === 'coach') {
-      query.coachId = userId; // Coach only sees their own ratings
-      console.log('📊 Querying skill ratings:', { query });
+      query.coachId = userIdObj; // Coach only sees their own ratings
+      console.log('📊 Querying skill ratings:', { query: { playerId: playerIdObj.toString(), coachId: userIdObj.toString() } });
     }
 
     const skillRatings = await SkillRating.find(query);
@@ -889,6 +893,10 @@ router.post('/skill-ratings/:playerId/:skillId', auth, isCoach, async (req, res)
 
     console.log('📥 POST /skill-ratings called:', { coachId, playerId, skillId, rating });
 
+    // Convert to ObjectIds for proper MongoDB querying
+    const coachIdObj = new mongoose.Types.ObjectId(coachId);
+    const playerIdObj = new mongoose.Types.ObjectId(playerId);
+
     // Validate rating is 0-7
     if (typeof rating !== 'number' || rating < 0 || rating > 7) {
       console.log('❌ Invalid rating value:', rating);
@@ -912,15 +920,15 @@ router.post('/skill-ratings/:playerId/:skillId', auth, isCoach, async (req, res)
       return res.status(403).json({ message: 'Access denied. Player not in your roster.' });
     }
 
-    console.log('✅ Coach verified:', { coachId, playerId });
+    console.log('✅ Coach verified:', { coachId: coachIdObj.toString(), playerId: playerIdObj.toString() });
 
-    // Find or create skill rating document
-    let skillRating = await SkillRating.findOne({ coachId, playerId });
+    // Find or create skill rating document with ObjectIds
+    let skillRating = await SkillRating.findOne({ coachId: coachIdObj, playerId: playerIdObj });
 
     if (!skillRating) {
       skillRating = new SkillRating({
-        coachId,
-        playerId,
+        coachId: coachIdObj,
+        playerId: playerIdObj,
         ratings: {},
       });
     }
