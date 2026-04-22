@@ -865,20 +865,31 @@ router.get('/skill-ratings/:playerId', auth, async (req, res) => {
       console.log('📊 [PLAYER] Querying skill ratings:', { query: { playerId: playerIdObj.toString() } });
     }
 
-    const skillRatings = await SkillRating.find(query);
-    console.log('📦 Query results:', { userRole, query: query, foundDocuments: skillRatings.length, playerIdObj: playerIdObj.toString() });
+    const skillRatings = await SkillRating.find(query).lean();
+    console.log('📦 Query results:', {
+      userRole,
+      query: JSON.stringify(query),
+      foundDocuments: skillRatings.length,
+      playerIdObj: playerIdObj.toString()
+    });
+
+    if (skillRatings.length > 0) {
+      console.log('✅ Found SkillRating documents:', skillRatings.length);
+    }
 
     // Debug: if player query returns nothing, show all documents for this playerId in DB
     if (userRole === 'player' && skillRatings.length === 0) {
-      const allForPlayer = await SkillRating.find({ playerId: playerIdObj });
+      console.log('🔍 [DEBUG-PLAYER] No documents found, searching all for this playerId...');
+      const allForPlayer = await SkillRating.find({ playerId: playerIdObj }).lean();
       console.log('🔍 [DEBUG-PLAYER] All documents for this playerId:', {
         playerIdObj: playerIdObj.toString(),
         count: allForPlayer.length,
         documents: allForPlayer.map(doc => ({
           _id: doc._id,
-          coachId: doc.coachId?.toString(),
-          playerId: doc.playerId?.toString(),
-          ratings: doc.ratings
+          coachId: doc.coachId,
+          playerId: doc.playerId,
+          ratingsType: typeof doc.ratings,
+          ratingsKeys: doc.ratings ? Object.keys(doc.ratings) : []
         }))
       });
 
@@ -904,30 +915,43 @@ router.get('/skill-ratings/:playerId', auth, async (req, res) => {
     // Merge all ratings (in case multiple coaches have rated)
     const allRatings = {};
 
-    skillRatings.forEach(sr => {
+    console.log('🔄 Starting to merge ratings from', skillRatings.length, 'documents');
+
+    skillRatings.forEach((sr, index) => {
       try {
-        // Convert Map to plain object
-        if (sr.ratings instanceof Map) {
-          const mapSize = sr.ratings.size;
-          sr.ratings.forEach((value, key) => {
-            allRatings[key] = value;
-          });
-          console.log('📊 Merged Map ratings:', { coachId: sr.coachId?.toString(), mapSize, keysAdded: Object.keys(allRatings).length });
-        } else if (sr.ratings && typeof sr.ratings === 'object') {
-          // Handle plain object
+        console.log(`📊 Processing document ${index + 1}:`, {
+          coachId: sr.coachId,
+          playerId: sr.playerId,
+          ratingsType: typeof sr.ratings,
+          isMap: sr.ratings instanceof Map,
+          ratingsValue: sr.ratings
+        });
+
+        // With .lean(), ratings should be a plain object, but handle both cases
+        if (sr.ratings && typeof sr.ratings === 'object') {
           Object.assign(allRatings, sr.ratings);
-          console.log('📊 Merged object ratings:', { coachId: sr.coachId?.toString(), keysAdded: Object.keys(allRatings).length });
+          console.log(`✅ Merged document ${index + 1}:`, {
+            coachId: sr.coachId,
+            newKeysCount: Object.keys(sr.ratings).length,
+            totalKeysAfterMerge: Object.keys(allRatings).length
+          });
+        } else {
+          console.warn(`⚠️  Document ${index + 1} has no ratings or invalid format:`, { ratingsType: typeof sr.ratings });
         }
       } catch (mergeErr) {
-        console.error('❌ Error merging ratings:', { error: mergeErr.message, sr: sr._id });
+        console.error(`❌ Error merging document ${index + 1}:`, {
+          error: mergeErr.message,
+          sr_id: sr._id,
+          stack: mergeErr.stack
+        });
       }
     });
 
-    console.log('📊 Final ratings returned:', {
+    console.log('✅ Final ratings to return:', {
       playerId: playerIdObj.toString(),
       userRole,
       foundDocuments: skillRatings.length,
-      ratingsCount: Object.keys(allRatings).length,
+      totalKeysInResponse: Object.keys(allRatings).length,
       allRatings
     });
 
