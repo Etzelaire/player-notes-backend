@@ -893,14 +893,10 @@ router.post('/skill-ratings/:playerId/:skillId', auth, isCoach, async (req, res)
 
     console.log('📥 POST /skill-ratings called:', { coachId, playerId, skillId, rating });
 
-    // Validate ObjectId formats
+    // Validate ObjectId formats (playerId only - skillId is a string key, not an ObjectId)
     if (!mongoose.Types.ObjectId.isValid(playerId)) {
       console.log('❌ Invalid playerId format:', playerId);
       return res.status(400).json({ message: 'Invalid player ID format' });
-    }
-    if (!mongoose.Types.ObjectId.isValid(skillId)) {
-      console.log('❌ Invalid skillId format:', skillId);
-      return res.status(400).json({ message: 'Invalid skill ID format' });
     }
 
     // Convert to ObjectIds for proper MongoDB querying
