@@ -903,18 +903,34 @@ router.get('/skill-ratings/:playerId', auth, async (req, res) => {
 
     // Merge all ratings (in case multiple coaches have rated)
     const allRatings = {};
+
     skillRatings.forEach(sr => {
-      // Convert Map to plain object if needed
-      if (sr.ratings instanceof Map) {
-        sr.ratings.forEach((value, key) => {
-          allRatings[key] = value;
-        });
-      } else {
-        Object.assign(allRatings, sr.ratings.toObject ? sr.ratings.toObject() : sr.ratings);
+      try {
+        // Convert Map to plain object
+        if (sr.ratings instanceof Map) {
+          const mapSize = sr.ratings.size;
+          sr.ratings.forEach((value, key) => {
+            allRatings[key] = value;
+          });
+          console.log('📊 Merged Map ratings:', { coachId: sr.coachId?.toString(), mapSize, keysAdded: Object.keys(allRatings).length });
+        } else if (sr.ratings && typeof sr.ratings === 'object') {
+          // Handle plain object
+          Object.assign(allRatings, sr.ratings);
+          console.log('📊 Merged object ratings:', { coachId: sr.coachId?.toString(), keysAdded: Object.keys(allRatings).length });
+        }
+      } catch (mergeErr) {
+        console.error('❌ Error merging ratings:', { error: mergeErr.message, sr: sr._id });
       }
     });
 
-    console.log('📊 Final ratings returned:', { playerId, userRole, ratingsCount: Object.keys(allRatings).length, allRatings });
+    console.log('📊 Final ratings returned:', {
+      playerId: playerIdObj.toString(),
+      userRole,
+      foundDocuments: skillRatings.length,
+      ratingsCount: Object.keys(allRatings).length,
+      allRatings
+    });
+
     res.json(allRatings || {});
   } catch (error) {
     console.error('Error fetching skill ratings:', error);
