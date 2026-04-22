@@ -841,6 +841,16 @@ router.get('/skill-ratings/:playerId', auth, async (req, res) => {
 
     console.log('📥 GET /skill-ratings/:playerId called:', { playerId, userId, userRole });
 
+    // Validate ObjectId formats
+    if (!mongoose.Types.ObjectId.isValid(playerId)) {
+      console.log('❌ Invalid playerId format:', playerId);
+      return res.status(400).json({ message: 'Invalid player ID format' });
+    }
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      console.log('❌ Invalid userId format:', userId);
+      return res.status(400).json({ message: 'Invalid user ID format' });
+    }
+
     // Convert to ObjectIds for proper MongoDB querying
     const playerIdObj = new mongoose.Types.ObjectId(playerId);
     const userIdObj = new mongoose.Types.ObjectId(userId);
@@ -948,7 +958,13 @@ router.post('/skill-ratings/:playerId/:skillId', auth, isCoach, async (req, res)
       skillRating = new SkillRating({
         coachId: coachIdObj,
         playerId: playerIdObj,
-        ratings: {},
+        ratings: new Map(),
+      });
+      console.log('📝 Created new SkillRating document:', {
+        coachId: coachIdObj.toString(),
+        playerId: playerIdObj.toString(),
+        coachIdType: typeof coachIdObj,
+        playerIdType: typeof playerIdObj
       });
     }
 
