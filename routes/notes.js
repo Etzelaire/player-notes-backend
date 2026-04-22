@@ -892,8 +892,7 @@ router.post('/skill-ratings/:playerId/:skillId', auth, isCoach, async (req, res)
       return res.status(403).json({ message: 'Coach not found' });
     }
 
-    // Convert playerId to ObjectId for proper comparison
-    const playerIdObj = mongoose.Types.ObjectId(playerId);
+    // Check if coach has this student (compare as strings)
     const hasStudent = coach.students.some(studentId =>
       studentId.toString() === playerId
     );
