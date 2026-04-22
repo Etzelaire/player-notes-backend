@@ -845,9 +845,19 @@ router.get('/skill-ratings/:playerId', auth, async (req, res) => {
     let query = { playerId };
     if (userRole === 'coach') {
       query.coachId = userId; // Coach only sees their own ratings
+      console.log('📊 Querying skill ratings:', { query });
     }
 
     const skillRatings = await SkillRating.find(query);
+    console.log('📦 Found skill rating documents:', skillRatings.length, 'documents');
+    if (skillRatings.length > 0) {
+      console.log('📊 Document details:', skillRatings.map(sr => ({
+        coachId: sr.coachId,
+        playerId: sr.playerId,
+        ratings: sr.ratings,
+        ratingsType: sr.ratings instanceof Map ? 'Map' : 'Object'
+      })));
+    }
 
     // Merge all ratings (in case multiple coaches have rated)
     const allRatings = {};
@@ -862,7 +872,7 @@ router.get('/skill-ratings/:playerId', auth, async (req, res) => {
       }
     });
 
-    console.log('📊 Skill ratings for player', playerId, ':', allRatings);
+    console.log('📊 Final ratings being returned for player', playerId, ':', allRatings);
     res.json(allRatings || {});
   } catch (error) {
     console.error('Error fetching skill ratings:', error);
@@ -929,9 +939,12 @@ router.post('/skill-ratings/:playerId/:skillId', auth, isCoach, async (req, res)
 
     skillRating.lastUpdated = new Date();
     skillRating.markModified('ratings');
+    console.log('📝 Before save, ratings object:', skillRating.ratings);
+
     await skillRating.save();
 
-    console.log('💾 Saved skill rating:', { coachId, playerId, skillId, rating });
+    console.log('✅ Successfully saved skill rating:', { coachId, playerId, skillId, rating });
+    console.log('📝 After save, ratings in DB:', skillRating.ratings);
     res.json({ success: true, rating, skillId });
   } catch (error) {
     console.error('Error setting skill rating:', error);
