@@ -868,6 +868,25 @@ router.get('/skill-ratings/:playerId', auth, async (req, res) => {
     const skillRatings = await SkillRating.find(query);
     console.log('📦 Query results:', { userRole, query: query, foundDocuments: skillRatings.length, playerIdObj: playerIdObj.toString() });
 
+    // Debug: if player query returns nothing, show all documents for this playerId in DB
+    if (userRole === 'player' && skillRatings.length === 0) {
+      const allForPlayer = await SkillRating.find({ playerId: playerIdObj });
+      console.log('🔍 [DEBUG-PLAYER] All documents for this playerId:', {
+        playerIdObj: playerIdObj.toString(),
+        count: allForPlayer.length,
+        documents: allForPlayer.map(doc => ({
+          _id: doc._id,
+          coachId: doc.coachId?.toString(),
+          playerId: doc.playerId?.toString(),
+          ratings: doc.ratings
+        }))
+      });
+
+      // Also show a count of ALL SkillRating documents
+      const totalCount = await SkillRating.countDocuments();
+      console.log('🔍 [DEBUG] Total SkillRating documents in database:', totalCount);
+    }
+
     if (skillRatings.length > 0) {
       console.log('📊 Document details:', skillRatings.map(sr => ({
         _id: sr._id,
