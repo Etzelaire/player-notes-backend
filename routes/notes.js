@@ -853,14 +853,19 @@ router.get('/skill-ratings/:playerId', auth, async (req, res) => {
     }
 
     const skillRatings = await SkillRating.find(query);
-    console.log('📦 Found skill rating documents:', skillRatings.length, 'documents');
+    console.log('📦 Query results:', { query: { playerId: playerIdObj.toString(), coachId: userIdObj ? userIdObj.toString() : 'n/a' }, foundDocuments: skillRatings.length });
+
     if (skillRatings.length > 0) {
       console.log('📊 Document details:', skillRatings.map(sr => ({
-        coachId: sr.coachId,
-        playerId: sr.playerId,
+        _id: sr._id,
+        coachId: sr.coachId?.toString(),
+        playerId: sr.playerId?.toString(),
         ratings: sr.ratings,
-        ratingsType: sr.ratings instanceof Map ? 'Map' : 'Object'
+        ratingsType: sr.ratings instanceof Map ? 'Map' : 'Object',
+        ratingsKeys: sr.ratings ? Object.keys(sr.ratings) : []
       })));
+    } else {
+      console.log('⚠️  No skill rating documents found for:', { playerId, userRole, query });
     }
 
     // Merge all ratings (in case multiple coaches have rated)
@@ -876,7 +881,7 @@ router.get('/skill-ratings/:playerId', auth, async (req, res) => {
       }
     });
 
-    console.log('📊 Final ratings being returned for player', playerId, ':', allRatings);
+    console.log('📊 Final ratings returned:', { playerId, userRole, ratingsCount: Object.keys(allRatings).length, allRatings });
     res.json(allRatings || {});
   } catch (error) {
     console.error('Error fetching skill ratings:', error);
@@ -916,13 +921,17 @@ router.post('/skill-ratings/:playerId/:skillId', auth, isCoach, async (req, res)
       return res.status(403).json({ message: 'Coach not found' });
     }
 
+    console.log('📋 Coach found:', { coachName: coach.name, coachId, studentIds: coach.students.map(s => s.toString()) });
+
     // Check if coach has this student (compare as strings)
     const hasStudent = coach.students.some(studentId =>
       studentId.toString() === playerId
     );
 
+    console.log('🔍 Student verification:', { playerId, hasStudent, studentIds: coach.students.map(s => s.toString()) });
+
     if (!hasStudent) {
-      console.log('❌ Player not in coach roster:', { coachId, playerId, studentIds: coach.students });
+      console.log('❌ Player not in coach roster:', { coachId, playerId, studentIds: coach.students.map(s => s.toString()) });
       return res.status(403).json({ message: 'Access denied. Player not in your roster.' });
     }
 
@@ -953,15 +962,23 @@ router.post('/skill-ratings/:playerId/:skillId', auth, isCoach, async (req, res)
 
     skillRating.lastUpdated = new Date();
     skillRating.markModified('ratings');
-    console.log('📝 Before save, ratings object:', skillRating.ratings);
+    console.log('📝 Before save:', { skillId, rating, ratingsObject: skillRating.ratings, isNew: skillRating.isNew });
 
-    await skillRating.save();
-
-    console.log('✅ Successfully saved skill rating:', { coachId, playerId, skillId, rating });
-    console.log('📝 After save, ratings in DB:', skillRating.ratings);
-    res.json({ success: true, rating, skillId });
+    try {
+      const saved = await skillRating.save();
+      console.log('✅ Save successful:', {
+        skillId,
+        rating,
+        savedDocument: saved,
+        ratingsAfterSave: saved.ratings
+      });
+      res.json({ success: true, rating, skillId });
+    } catch (saveError) {
+      console.error('❌ Save failed:', { error: saveError.message, stack: saveError.stack });
+      throw saveError;
+    }
   } catch (error) {
-    console.error('Error setting skill rating:', error);
+    console.error('❌ Error setting skill rating:', { message: error.message, stack: error.stack });
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
