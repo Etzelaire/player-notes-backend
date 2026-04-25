@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { User, LessonNote } = require('../models/User');
 const SkillRating = require('../models/SkillRating');
+const PlayerAchievement = require('../models/PlayerAchievement');
 const { auth, isCoach } = require('../middleware/auth');
 const { sendNotificationToPlayer } = require('../utils/notifications');
 const mongoose = require('mongoose');
@@ -1085,6 +1086,51 @@ router.get('/diagnostic/all-skill-ratings', auth, async (req, res) => {
   } catch (error) {
     console.error('❌ Diagnostic error:', error);
     res.status(500).json({ message: 'Error', error: error.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════
+// ACHIEVEMENT ROUTES
+// ═══════════════════════════════════════════════════════
+
+// GET /api/notes/achievements/:playerId
+router.get('/achievements/:playerId', auth, async (req, res) => {
+  try {
+    const playerId = new mongoose.Types.ObjectId(req.params.playerId);
+    const records = await PlayerAchievement.find({ playerId }).sort({ unlockedAt: 1 });
+    res.json({
+      achievements: records.map(r => ({
+        id: r.achievementId,
+        unlockedAt: r.unlockedAt,
+      })),
+    });
+  } catch (err) {
+    console.error('❌ GET achievements error:', err);
+    res.status(500).json({ message: 'Failed to fetch achievements', error: err.message });
+  }
+});
+
+// POST /api/notes/achievements/:playerId  { achievementIds: string[] }
+router.post('/achievements/:playerId', auth, async (req, res) => {
+  try {
+    const playerId = new mongoose.Types.ObjectId(req.params.playerId);
+    const { achievementIds } = req.body;
+    if (!Array.isArray(achievementIds) || achievementIds.length === 0)
+      return res.status(400).json({ message: 'achievementIds must be a non-empty array' });
+
+    const ops = achievementIds.map(achievementId => ({
+      updateOne: {
+        filter: { playerId, achievementId },
+        update: { $setOnInsert: { playerId, achievementId, unlockedAt: new Date() } },
+        upsert: true,
+      },
+    }));
+    const result = await PlayerAchievement.bulkWrite(ops);
+    console.log(`✅ Saved ${result.upsertedCount} new achievements for player ${req.params.playerId}`);
+    res.json({ saved: result.upsertedCount, total: achievementIds.length });
+  } catch (err) {
+    console.error('❌ POST achievements error:', err);
+    res.status(500).json({ message: 'Failed to save achievements', error: err.message });
   }
 });
 
