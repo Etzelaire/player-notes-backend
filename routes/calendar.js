@@ -58,11 +58,11 @@ router.get('/events', auth, isCoach, async (req, res) => {
     const startOfDay = new Date(year, month - 1, day, 0, 0, 0, 0);
     const endOfDay = new Date(year, month - 1, day, 23, 59, 59, 999);
 
-    // Convert local dates to UTC ISO strings for API query
-    const timeMin = new Date(startOfDay.getTime() - startOfDay.getTimezoneOffset() * 60000).toISOString();
-    const timeMax = new Date(endOfDay.getTime() - endOfDay.getTimezoneOffset() * 60000).toISOString();
+    // JavaScript Date object automatically handles timezone conversion when using toISOString()
+    const timeMin = startOfDay.toISOString();
+    const timeMax = endOfDay.toISOString();
 
-    console.log(`🔍 Querying calendar ${process.env.GOOGLE_CALENDAR_ID} from ${timeMin} to ${timeMax} (local: ${date})`);
+    console.log(`🔍 Querying calendar ${process.env.GOOGLE_CALENDAR_ID} for local date ${date}`);
 
     // Fetch events from calendar
     const response = await calendar.events.list({
