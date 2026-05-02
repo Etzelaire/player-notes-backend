@@ -136,6 +136,25 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  // Google Calendar OAuth
+  googleOAuthToken: {
+    refreshToken: {
+      type: String,
+      default: null
+    },
+    accessToken: {
+      type: String,
+      default: null
+    },
+    tokenExpiry: {
+      type: Date,
+      default: null
+    },
+    authorizedAt: {
+      type: Date,
+      default: null
+    }
+  },
   students: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
