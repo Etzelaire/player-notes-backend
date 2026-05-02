@@ -52,17 +52,23 @@ router.get('/events', auth, isCoach, async (req, res) => {
     // Authorize and create calendar client
     const calendar = google.calendar({ version: 'v3', auth: jwtClient });
 
-    // Parse date and create time boundaries (handle timezone correctly)
-    // Date comes as YYYY-MM-DD, create it in local timezone
+    // Parse date in Singapore timezone (UTC+8)
+    // Client sends date as YYYY-MM-DD in their local time (Singapore)
     const [year, month, day] = date.split('-').map(Number);
-    const startOfDay = new Date(year, month - 1, day, 0, 0, 0, 0);
-    const endOfDay = new Date(year, month - 1, day, 23, 59, 59, 999);
 
-    // JavaScript Date object automatically handles timezone conversion when using toISOString()
-    const timeMin = startOfDay.toISOString();
-    const timeMax = endOfDay.toISOString();
+    // Create date boundaries in Singapore time, then convert to UTC for API
+    // Singapore is UTC+8, so we need to subtract 8 hours to get UTC
+    const singaporeOffset = 8 * 60 * 60 * 1000; // 8 hours in milliseconds
 
-    console.log(`🔍 Querying calendar ${process.env.GOOGLE_CALENDAR_ID} for local date ${date}`);
+    // Start of day in Singapore time
+    const startOfDaySG = new Date(year, month - 1, day, 0, 0, 0, 0);
+    const timeMin = new Date(startOfDaySG.getTime() - singaporeOffset).toISOString();
+
+    // End of day in Singapore time
+    const endOfDaySG = new Date(year, month - 1, day, 23, 59, 59, 999);
+    const timeMax = new Date(endOfDaySG.getTime() - singaporeOffset).toISOString();
+
+    console.log(`🔍 Querying calendar for ${date} (Singapore time) - UTC range: ${timeMin} to ${timeMax}`);
 
     // Fetch events from calendar
     const response = await calendar.events.list({
