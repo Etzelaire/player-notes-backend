@@ -52,21 +52,23 @@ router.get('/events', auth, isCoach, async (req, res) => {
     // Authorize and create calendar client
     const calendar = google.calendar({ version: 'v3', auth: jwtClient });
 
-    // Parse date and create time boundaries
-    const targetDate = new Date(date);
-    const startOfDay = new Date(targetDate);
-    startOfDay.setHours(0, 0, 0, 0);
+    // Parse date and create time boundaries (handle timezone correctly)
+    // Date comes as YYYY-MM-DD, create it in local timezone
+    const [year, month, day] = date.split('-').map(Number);
+    const startOfDay = new Date(year, month - 1, day, 0, 0, 0, 0);
+    const endOfDay = new Date(year, month - 1, day, 23, 59, 59, 999);
 
-    const endOfDay = new Date(targetDate);
-    endOfDay.setHours(23, 59, 59, 999);
+    // Convert local dates to UTC ISO strings for API query
+    const timeMin = new Date(startOfDay.getTime() - startOfDay.getTimezoneOffset() * 60000).toISOString();
+    const timeMax = new Date(endOfDay.getTime() - endOfDay.getTimezoneOffset() * 60000).toISOString();
 
-    console.log(`🔍 Querying calendar ${process.env.GOOGLE_CALENDAR_ID} from ${startOfDay.toISOString()} to ${endOfDay.toISOString()}`);
+    console.log(`🔍 Querying calendar ${process.env.GOOGLE_CALENDAR_ID} from ${timeMin} to ${timeMax} (local: ${date})`);
 
     // Fetch events from calendar
     const response = await calendar.events.list({
       calendarId: process.env.GOOGLE_CALENDAR_ID,
-      timeMin: startOfDay.toISOString(),
-      timeMax: endOfDay.toISOString(),
+      timeMin: timeMin,
+      timeMax: timeMax,
       singleEvents: true,
       orderBy: 'startTime'
     });
