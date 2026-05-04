@@ -58,7 +58,7 @@ router.get('/players', auth, isCoach, async (req, res) => {
   try {
     const coach = await User.findById(req.user.id).populate({
       path: 'students',
-      select: 'name email notes createdAt'
+      select: 'name email role notes createdAt'
     });
     
     const students = coach.students || [];
