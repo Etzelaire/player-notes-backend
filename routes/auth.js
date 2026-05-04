@@ -8,11 +8,16 @@ const router = express.Router();
 // Register new user
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, role, gender } = req.body;
+    const { name, email, password, role, gender, handedness } = req.body;
 
     // Validate gender is provided and valid
     if (!gender || !['m', 'f'].includes(gender)) {
       return res.status(400).json({ message: 'Gender must be either "m" or "f"' });
+    }
+
+    // Validate handedness is provided and valid
+    if (!handedness || !['r', 'l'].includes(handedness)) {
+      return res.status(400).json({ message: 'Handedness must be either "r" (right) or "l" (left)' });
     }
 
     // Check if user already exists
@@ -30,7 +35,8 @@ router.post('/register', async (req, res) => {
       email,
       password: hashedPassword,
       role: role || 'player',
-      gender: gender
+      gender: gender,
+      handedness: handedness
     });
 
     await user.save();
@@ -73,7 +79,8 @@ router.post('/login', async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        gender: user.gender || 'm'
+        gender: user.gender || 'm',
+        handedness: user.handedness || 'r'
       }
     });
   } catch (error) {

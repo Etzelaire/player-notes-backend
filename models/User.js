@@ -137,6 +137,11 @@ const userSchema = new mongoose.Schema({
     enum: ['m', 'f'],
     default: 'm'
   },
+  handedness: {
+    type: String,
+    enum: ['r', 'l'],
+    default: 'r'
+  },
   fcmToken: {
     type: String,
     default: null
