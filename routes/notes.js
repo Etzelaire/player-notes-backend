@@ -58,7 +58,7 @@ router.get('/players', auth, isCoach, async (req, res) => {
   try {
     const coach = await User.findById(req.user.id).populate({
       path: 'students',
-      select: 'name email role notes createdAt'
+      select: 'name email role gender handedness notes createdAt'
     });
     
     const students = coach.students || [];
@@ -105,9 +105,9 @@ router.post('/players/:playerId/notes', auth, isCoach, async (req, res) => {
     console.log('Type:', noteType);
     console.log('═══════════════════════════════════════════════════════════');
 
-    // Validate player exists
+    // Validate player exists and is a student (player or manager)
     const player = await User.findById(playerId);
-    if (!player || player.role !== 'player') {
+    if (!player || (player.role !== 'player' && player.role !== 'manager')) {
       return res.status(404).json({ message: 'Player not found' });
     }
 
