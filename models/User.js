@@ -132,6 +132,11 @@ const userSchema = new mongoose.Schema({
     enum: ['coach', 'player'],
     default: 'player'
   },
+  gender: {
+    type: String,
+    enum: ['m', 'f'],
+    default: 'm'
+  },
   fcmToken: {
     type: String,
     default: null

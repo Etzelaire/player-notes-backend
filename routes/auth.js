@@ -8,7 +8,12 @@ const router = express.Router();
 // Register new user
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, gender } = req.body;
+
+    // Validate gender is provided and valid
+    if (!gender || !['m', 'f'].includes(gender)) {
+      return res.status(400).json({ message: 'Gender must be either "m" or "f"' });
+    }
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
@@ -24,7 +29,8 @@ router.post('/register', async (req, res) => {
       name,
       email,
       password: hashedPassword,
-      role: role || 'player'
+      role: role || 'player',
+      gender: gender
     });
 
     await user.save();
@@ -66,7 +72,8 @@ router.post('/login', async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role
+        role: user.role,
+        gender: user.gender || 'm'
       }
     });
   } catch (error) {
