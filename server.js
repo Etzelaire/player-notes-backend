@@ -9,6 +9,7 @@ const authRoutes = require('./routes/auth');
 const notesRoutes = require('./routes/notes');
 const savedNotesRouter = require('./routes/savedNotes');
 const calendarRoutes = require('./routes/calendar');
+const managersRoutes = require('./routes/managers');
 
 
 // Initialize Express app FIRST
@@ -50,6 +51,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/notes', notesRoutes);
 app.use('/api/saved-notes', savedNotesRouter);
 app.use('/api/calendar', calendarRoutes);
+app.use('/api/managers', managersRoutes);
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI)

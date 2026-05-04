@@ -23,4 +23,11 @@ const isCoach = (req, res, next) => {
   next();
 };
 
-module.exports = { auth, isCoach };
+const isManager = (req, res, next) => {
+  if (req.user.role !== 'manager') {
+    return res.status(403).json({ message: 'Access denied. Manager only.' });
+  }
+  next();
+};
+
+module.exports = { auth, isCoach, isManager };

@@ -1134,4 +1134,53 @@ router.post('/achievements/:playerId', auth, async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════
+// CHANGE STUDENT ROLE (coach only - promote/demote manager)
+// ═══════════════════════════════════════════════════════
+router.put('/students/:studentId/role', auth, isCoach, async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { newRole } = req.body;
+    const coachId = req.user.id;
+
+    // Validate role
+    if (!['player', 'manager'].includes(newRole)) {
+      return res.status(400).json({ error: 'Invalid role. Must be "player" or "manager"' });
+    }
+
+    // Verify coach owns this student
+    const coach = await User.findById(coachId);
+    if (!coach || !coach.students.includes(studentId)) {
+      return res.status(403).json({ error: 'Not authorized to manage this student' });
+    }
+
+    // Update student role
+    const student = await User.findByIdAndUpdate(
+      studentId,
+      { role: newRole },
+      { new: true }
+    ).select('name email role');
+
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    console.log(`✅ Student ${student.name} role changed to ${newRole}`);
+
+    res.json({
+      success: true,
+      message: `Student role updated to ${newRole}`,
+      student: {
+        _id: student._id,
+        name: student.name,
+        email: student.email,
+        role: student.role
+      }
+    });
+  } catch (error) {
+    console.error('Error changing student role:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;
