@@ -815,8 +815,9 @@ router.get('/skill-ratings/:playerId', auth, async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    // Check if user is the player viewing their own ratings, or a coach viewing a student's ratings
-    if (userRole === 'player') {
+    // Check if user is the player viewing their own ratings, a manager viewing their own ratings, or a coach viewing a student's ratings
+    if (userRole === 'player' || userRole === 'manager') {
+      // Players and managers can only view their own ratings
       if (userId !== playerId) {
         return res.status(403).json({ message: 'Access denied. You can only view your own ratings.' });
       }
@@ -1096,7 +1097,36 @@ router.get('/diagnostic/all-skill-ratings', auth, async (req, res) => {
 // GET /api/notes/achievements/:playerId
 router.get('/achievements/:playerId', auth, async (req, res) => {
   try {
-    const playerId = new mongoose.Types.ObjectId(req.params.playerId);
+    const { playerId: playerIdParam } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Check if user is allowed to access these achievements
+    if (userRole === 'player' || userRole === 'manager') {
+      // Players and managers can only view their own achievements
+      if (userId !== playerIdParam) {
+        return res.status(403).json({ message: 'Access denied. You can only view your own achievements.' });
+      }
+    } else if (userRole === 'coach') {
+      // Verify coach has this player
+      const coach = await User.findById(userId);
+      if (!coach) {
+        return res.status(403).json({ message: 'Coach not found.' });
+      }
+
+      // Properly compare ObjectIds
+      const hasStudent = coach.students.some(studentId =>
+        studentId.toString() === playerIdParam
+      );
+
+      if (!hasStudent) {
+        return res.status(403).json({ message: 'Access denied. Player not in your roster.' });
+      }
+    } else {
+      return res.status(403).json({ message: 'Access denied.' });
+    }
+
+    const playerId = new mongoose.Types.ObjectId(playerIdParam);
     const records = await PlayerAchievement.find({ playerId }).sort({ unlockedAt: 1 });
     res.json({
       achievements: records.map(r => ({
@@ -1113,7 +1143,22 @@ router.get('/achievements/:playerId', auth, async (req, res) => {
 // POST /api/notes/achievements/:playerId  { achievementIds: string[] }
 router.post('/achievements/:playerId', auth, async (req, res) => {
   try {
-    const playerId = new mongoose.Types.ObjectId(req.params.playerId);
+    const { playerId: playerIdParam } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Check if user is allowed to save achievements for this player
+    // Managers and players can only save for themselves
+    // Coaches can't save achievements (frontend does that automatically)
+    if (userRole === 'player' || userRole === 'manager') {
+      if (userId !== playerIdParam) {
+        return res.status(403).json({ message: 'Access denied. You can only save achievements for yourself.' });
+      }
+    } else {
+      return res.status(403).json({ message: 'Access denied.' });
+    }
+
+    const playerId = new mongoose.Types.ObjectId(playerIdParam);
     const { achievementIds } = req.body;
     if (!Array.isArray(achievementIds) || achievementIds.length === 0)
       return res.status(400).json({ message: 'achievementIds must be a non-empty array' });
