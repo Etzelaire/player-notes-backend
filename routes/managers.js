@@ -1,8 +1,23 @@
 const express = require('express');
 const { User } = require('../models/User');
 const { auth, isManager } = require('../middleware/auth');
+const { google } = require('googleapis');
 
 const router = express.Router();
+
+// Get service account from environment or file
+let serviceAccount;
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  console.log('✅ Using FIREBASE_SERVICE_ACCOUNT for Manager Calendar API');
+} else {
+  try {
+    serviceAccount = require('../firebase-service-account.json');
+    console.log('✅ Using firebase-service-account.json for Manager Calendar API');
+  } catch (error) {
+    console.error('⚠️ Service account file not found for Manager Calendar API');
+  }
+}
 
 // ═══════════════════════════════════════════════════════
 // MANAGER ROUTES
@@ -38,6 +53,10 @@ router.get('/coach-schedule', auth, isManager, async (req, res) => {
     const managerId = req.user.id;
     const { date } = req.query; // Format: YYYY-MM-DD
 
+    if (!date) {
+      return res.status(400).json({ error: 'Date parameter required (YYYY-MM-DD)' });
+    }
+
     // Find the manager's coach
     const coach = await User.findOne({
       role: 'coach',
@@ -48,18 +67,58 @@ router.get('/coach-schedule', auth, isManager, async (req, res) => {
       return res.status(403).json({ error: 'No connected coach' });
     }
 
-    // Return empty lessons array for now
-    // In a real app with Lesson model, you would query:
-    // const lessons = await Lesson.find({
-    //   coachId: coach._id,
-    //   date: date
-    // }).populate('studentId', 'name role').sort({ time: 1 });
+    // Fetch coach's calendar events using service account
+    if (!serviceAccount) {
+      console.error('❌ Service account not configured for Coach Calendar API');
+      return res.status(500).json({ error: 'Service account not configured' });
+    }
+
+    if (!process.env.GOOGLE_CALENDAR_ID) {
+      console.error('❌ GOOGLE_CALENDAR_ID not configured');
+      return res.status(500).json({ error: 'Calendar ID not configured' });
+    }
+
+    console.log(`📅 Fetching coach calendar events for ${date}`);
+
+    // Create JWT for service account
+    const jwtClient = new google.auth.JWT(
+      serviceAccount.client_email,
+      null,
+      serviceAccount.private_key,
+      ['https://www.googleapis.com/auth/calendar.readonly']
+    );
+
+    // Authorize and create calendar client
+    const calendar = google.calendar({ version: 'v3', auth: jwtClient });
+
+    // Parse date as Singapore timezone (UTC+8)
+    const [year, month, day] = date.split('-').map(Number);
+
+    // Singapore is UTC+8, so:
+    // May 2 00:00 Singapore = May 1 16:00 UTC
+    // May 2 23:59 Singapore = May 2 15:59 UTC
+    // Query from (day-1) 16:00 UTC to day 16:00 UTC
+
+    const timeMin = new Date(Date.UTC(year, month - 1, day - 1, 16, 0, 0)).toISOString();
+    const timeMax = new Date(Date.UTC(year, month - 1, day, 16, 0, 0)).toISOString();
+
+    console.log(`🔍 Querying coach calendar for Singapore date ${date}`);
+
+    // Fetch events from calendar
+    const response = await calendar.events.list({
+      calendarId: process.env.GOOGLE_CALENDAR_ID,
+      timeMin: timeMin,
+      timeMax: timeMax,
+      singleEvents: true,
+      orderBy: 'startTime'
+    });
+
+    const events = response.data.items || [];
+
+    console.log(`✅ Retrieved ${events.length} events for ${date}`);
 
     res.json({
-      coachId: coach._id,
-      coachName: coach.name,
-      date: date,
-      lessons: []
+      events: events
     });
   } catch (error) {
     console.error('Error loading coach schedule:', error);
